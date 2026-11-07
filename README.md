@@ -18,7 +18,13 @@ Funciona em Chrome, Edge, Brave, Opera e Firefox, em qualquer sistema (Windows, 
   relógio do jogo continua andando e o bot acompanha.
 - **Notas longas:** o rastro da nota longa (triângulo de stencil + quad) dá o fim exato, inclusive em acordes de
   notas longas.
-- **Pausa:** ao pausar, o bot solta as teclas e congela a agenda; ao voltar, reagenda as notas que ainda não passaram.
+- **Identidade das notas:** cada nota é seguida de um quadro para o outro pela própria posição na pista (todas descem o
+  mesmo número de passos), então um salto de relógio nunca transforma a mesma nota em duas.
+- **Especial (espaço):** com o especial ativo o jogo desenha todas as notas com a mesma textura, por isso a corda de
+  cada nota vem da posição dela na pista, não da cor.
+- **Pausa (tecla P):** na volta da pausa o relógio do jogo pula ~60-70 ms. Para nenhuma nota ser perdida nesse salto,
+  o bot segura a tecla P até uma brecha nas notas (normalmente uma fração de segundo, no máximo 5 s) e só então pausa
+  o jogo. Na volta ele reencontra as notas pelo deslocamento da pista e recalcula os horários com o relógio novo.
 
 ## Pastas
 

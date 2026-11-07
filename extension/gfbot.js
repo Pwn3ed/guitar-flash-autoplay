@@ -6,7 +6,9 @@
 //    GPU (bufferSubData: x, y, u, v, colour, texture per vertex) and draws them (drawElements). We hook both on the
 //    WebGL prototypes and read that data directly - no pixels are read, so flashes, flames and hit effects do not
 //    hide anything.
-//  - Notes are the sprites whose texture region is "notaL-v.png" in the game's atlas (image2.json): L = lane.
+//  - Notes are the sprites whose texture region is "notaL-v.png" in the game's atlas (image2.json). The lane is taken
+//    from the sprite's position on the highway (with the Special active every note uses the same texture).
+//  - A note keeps its identity from frame to frame by position (all notes move down by the same number of steps).
 //  - Note positions sit on a fixed lattice: y(i) = Q0 + Q1*i + Q2*i^2, one step per 1/24 s of song time, i = 0 at the
 //    top of the highway and 38 at the frets. With the game clock (ytPlayer.getCurrentTime, quantized to 1/24 s and
 //    the renderer snaps to floor(clock * 24)) every note gets an exact time: noteTime = (X - N) / 24, N = i - tick.
@@ -24,16 +26,22 @@
     phDecay: 0.985,                   // memory of the clock phase estimator (per frame)
     Q: [203.0929, 0.90768, 0.186434], // highway lattice: y(i) = Q0 + Q1*i + Q2*i^2 (game world units, 822x580)
     fretX: [228.5, 318.5, 407.5, 497.5, 587.5], // lane centres at the frets (sustain triangles -> lane)
+    laneX: [407.7, 0.2332, 125.7],    // perspective: lane = round((x - c) / (s * (y - y0))) + 2 (c = middle lane)
     tapHold: 0.030,                   // how long a normal note is held (s)
     relOff: 0.015,                    // hold a sustain this much past its end (s); holding a bit long costs nothing
-    newMaxI: 30,                      // new notes are only accepted above this lattice step (38 = frets)
+    newMaxI: 30,                      // new notes are only accepted above this lattice step (38 = frets)...
+    reacqMaxI: 39.4,                  // ... except in the first frame after a pause: up to the frets (a note can be right
+                                      //     there when the game pauses; keys are released, so no press sprites)
+    pauseGap: 0.065,                  // the pause key waits until no note is due within this time (s)...
+    pauseMax: 5,                      // ... but never longer than this (s)
+    voteDecay: 0.7,                   // weight kept by a note's older tick votes at each new sighting
     KEYS: [['a', 'KeyA', 65], ['s', 'KeyS', 83], ['j', 'KeyJ', 74], ['k', 'KeyK', 75], ['l', 'KeyL', 76]],
   };
   const [Q0, Q1, Q2] = CFG.Q;
   const yTop = Q0 - Q1 * Q1 / (4 * Q2);                         // lowest y the lattice formula can invert
   const indexOf = (y) => (y <= yTop ? NaN : (-Q1 + Math.sqrt(Q1 * Q1 + 4 * Q2 * (y - Q0))) / (2 * Q2));
 
-  const G = window.GFBOT = { __v: 9, cfg: CFG, bot: null, running: false, debug: false, atlas: null };
+  const G = window.GFBOT = { __v: 10, cfg: CFG, bot: null, running: false, debug: false, atlas: null };
 
   // ---- atlas: texture regions of the note sprites, from the game's own image2.json ----
   let atlasLoading = null;
@@ -45,7 +53,7 @@
       const W = j.meta.size.w, H = j.meta.size.h, notes = [];
       for (const [name, f] of Object.entries(j.frames)) {
         const m = /^nota(\d)-(\d)\.png$/.exec(name);
-        if (m) notes.push({ lane: +m[1] - 1, u: f.frame.x / W, v: f.frame.y / H });
+        if (m) notes.push({ lane: +m[1] - 1, k: name, u: f.frame.x / W, v: f.frame.y / H });
       }
       if (notes.length) G.atlas = { notes };
     }).catch(() => { }).finally(() => { atlasLoading = null; });
@@ -98,7 +106,7 @@
     const bot = {
       notes: [[], [], [], [], []], down: [0, 0, 0, 0, 0], cur: [null, null, null, null, null],
       presses: 0, songPresses: 0, frames: 0, ms: 0, lastS: -1, hb: performance.now(), fired: [], events: [],
-      paused: false, lastState: -1, session: null,
+      paused: false, lastState: -1, session: null, reacq: false, trace: [], born: [], fid: 0, lastT: null, lastFire: -1, holds: [],
     };
     const dispatch = w.Document.prototype.dispatchEvent;
     const send = (i, type) => { const [key, code, kc] = CFG.KEYS[i]; dispatch.call(w.document, new w.KeyboardEvent(type, { key, code, keyCode: kc, which: kc, bubbles: true, cancelable: true })); };
@@ -117,7 +125,7 @@
       if (n.fired || !G.running) return;
       n.fired = 1;
       if (bot.down[i]) send(i, 'keyup');
-      send(i, 'keydown'); bot.down[i] = 1; bot.cur[i] = n; bot.presses++; bot.songPresses++;
+      send(i, 'keydown'); bot.down[i] = 1; bot.cur[i] = n; bot.presses++; bot.songPresses++; bot.lastFire = clk();
       if (bot.session) bot.session.presses++;
       if (G.debug && bot.fired.length < 5000) bot.fired.push({ t: performance.now(), S: clk(), i, nt: n.nt, sus: n.sus, rel: n.rel });
       planRelease(i, n);
@@ -153,7 +161,14 @@
         const ymin = Math.min(fl[b + 1], fl[b + 7], fl[b + 13], fl[b + 19]), ymax = Math.max(fl[b + 1], fl[b + 7], fl[b + 13], fl[b + 19]);
         if (lastTri >= 0 && nq === 1 && u0 === 0 && v0 === 0) { frameTrails.push({ lane: lastTri, y0: ymin, y1: ymax }); continue; }
         for (const a of atlasNotes) {
-          if (Math.abs(a.u - u0) < 0.002 && Math.abs(a.v - v0) < 0.002) { frameNotes.push({ lane: a.lane, y: (ymin + ymax) / 2 }); break; }
+          if (Math.abs(a.u - u0) < 0.002 && Math.abs(a.v - v0) < 0.002) {
+            // the lane comes from the position, not the texture: with the Special active every note is drawn with the
+            // same (green) texture
+            const x = (fl[b] + fl[b + 6] + fl[b + 12] + fl[b + 18]) / 4, y = (ymin + ymax) / 2;
+            const lane = Math.round((x - CFG.laneX[0]) / (CFG.laneX[1] * (y - CFG.laneX[2]))) + 2;
+            if (lane >= 0 && lane <= 4) frameNotes.push({ lane, y, x, k: a.k });
+            break;
+          }
         }
       }
       lastTri = -1;
@@ -196,28 +211,62 @@
       const T = Sg * 24;
       // lattice cell of every note sprite on the open highway (the fret row is excluded: hit/press sprites stay there)
       const sprites = [];
-      for (const fn of frameNotes) { const i = indexOf(fn.y); if (i >= -0.5) sprites.push({ lane: fn.lane, i, r: Math.round(i) }); }
+      // (one sprite per lane and step: some notes, like the Special ones, are drawn as two sprites in the same place)
+      const seenCell = new Set();
+      for (const fn of frameNotes) {
+        const i = indexOf(fn.y); if (!(i >= -0.5)) continue;
+        const r = Math.round(i), key = fn.lane * 1000 + r;
+        if (!seenCell.has(key)) { seenCell.add(key); sprites.push({ lane: fn.lane, i, r, x: fn.x, k: fn.k }); }
+      }
       updatePhase(T, sprites.filter((p) => p.r >= 1 && p.r <= 35).map((p) => p.lane * 1000 + p.r));
       const b = PH.b, gt = Math.floor(T - b), fr = T - b - gt;
+      // Visual tracking: between two frames every note moves down by the same number of steps, so a note seen last
+      // frame at row r is the sprite at r + steps now. This keeps a note's identity even when a clock jumps (the game
+      // re-syncing, or the video clock after buffering), which would otherwise turn the same note into a new one.
+      const fid = ++bot.fid, T0 = bot.lastT; bot.lastT = T;
+      let steps = PH.steps != null ? PH.steps : (T0 != null && T > T0 ? Math.floor(T - b) - Math.floor(T0 - b) : null);
+      if (bot.reacq) {                  // first frame after a pause: the shift since the last frame before it, by overlap
+        let bc = 0; steps = null;
+        for (let st = 0; st <= 3; st++) {          // (the game comes back 1-2 ticks further on)
+          let c = 0; for (const p of sprites) if (bot.notes[p.lane].some((m) => m.seen === fid - 1 && m.r + st === p.r)) c++;
+          if (c > bc) { bc = c; steps = st; }
+        }
+      }
+      const claimed = new Set();
+      if (steps != null) {
+        for (const p of sprites) {
+          const n = bot.notes[p.lane].find((m) => m.seen === fid - 1 && m.r + steps === p.r && !claimed.has(m));
+          if (n) { p.n = n; claimed.add(n); }
+        }
+      }
+      for (const p of sprites) if (p.n) { p.n.r = p.r; p.n.seen = fid; }
       // near a game tick boundary the phase is uncertain: this frame could be one tick off, so it is not used
       const margin = Math.min(0.3, Math.max(CFG.edge, PH.half + 0.02));
-      if (fr < margin || fr > 1 - margin) return;
+      if (G.debug) { bot.trace.push([performance.now() | 0, +S.toFixed(4), +b.toFixed(3), +PH.half.toFixed(3), PH.steps, gt, +fr.toFixed(2), sprites.map((p) => p.lane + ':' + p.i.toFixed(2) + ':' + p.x.toFixed(1) + ':' + p.k).join(' ')]); if (bot.trace.length > 20000) bot.trace.splice(0, 5000); }
+      // (except the first frame after a pause: notes at the frets must be taken now; votes fix their tick later)
+      if (!bot.reacq && (fr < margin || fr > 1 - margin)) return;
       const timeOf = (i) => (CFG.X - (i - gt) + b) / 24;
       for (const p of sprites) {
         const N = p.r - gt, nt = timeOf(p.r);
-        if (nt < S - 0.03) continue;
+        if (nt < S - (bot.reacq ? 0.045 : 0.03)) continue;
         const L = bot.notes[p.lane];
-        // the same note: within one tick of a known note (votes fix any frame that was still one tick off)
-        let n = null, bd = 2;
-        for (const m of L) { const d = Math.abs(m.N - N); if (d <= 1 && d < bd) { bd = d; n = m; } }
+        // the same note: tracked from the last frame, or else within one tick of a known note
+        let n = p.n || null, bd = 2;
+        if (!n) for (const m of L) { const d = Math.abs(m.N - N); if (d <= 1 && d < bd) { bd = d; n = m; } }
         // A NEW note must be seen well above the frets: real notes come down from the top of the highway, while the
         // game also draws a note sprite on the fret when a key is pressed (press feedback) - that must never become
         // a note, or every press would schedule another one.
-        if (!n && p.i > CFG.newMaxI) continue;
+        // (right after a resume nothing is pressed, so the first frame takes every note down to the frets)
+        if (!n && p.i > (bot.reacq ? CFG.reacqMaxI : CFG.newMaxI)) continue;
         if (!n) {
           n = { N, v: {}, nt, rel: 0, sus: 0 };
           L.push(n);
+          if (G.debug) bot.born.push([performance.now() | 0, +S.toFixed(4), p.lane, N, +p.i.toFixed(2), +nt.toFixed(4), bot.reacq ? 1 : 0]);
         }
+        claimed.add(n); n.r = p.r; n.seen = fid;
+        // votes for the note's tick (they fix a frame that was one tick off); old votes fade so that after a clock jump
+        // the note follows the new clock within a few frames
+        for (const k in n.v) n.v[k] *= CFG.voteDecay;
         n.v[N] = (n.v[N] || 0) + 1;
         let mN = n.N, mc = -1; for (const k in n.v) if (n.v[k] > mc) { mc = n.v[k]; mN = +k; }
         n.N = mN;
@@ -227,6 +276,7 @@
           const pv = L[L.indexOf(n) - 1]; if (pv && pv.fired && !pv.done) planRelease(p.lane, pv);
         }
       }
+      bot.reacq = false;
       for (const tr of frameTrails) {
         const L = bot.notes[tr.lane];
         // the trail starts at its note (bottom edge); while held, the bottom stays at the frets
@@ -252,15 +302,41 @@
         bot.notes[i].forEach((n) => { cancel(n.tp); cancel(n.tr); });
       }
     }
-    // Resume (or the clock jumped back): re-plan every note that has not reached the frets yet; if the game rewound the
-    // song, notes that were already played are played again.
-    function resume(S) {
+    // Resume (or the clock jumped back): after the pause countdown the game re-syncs its own clock, which can move it by
+    // whole ticks relative to the video, so every note's time is measured again from scratch (fresh votes, the phase
+    // estimator starts over). The notes themselves are kept: the first frame finds them again by how far the highway
+    // moved, so a note already played before the pause is not played again. That frame may also take new notes down
+    // to the frets.
+    function resume() {
       for (let i = 0; i < 5; i++) {
-        bot.notes[i] = bot.notes[i].filter((n) => n.nt > S - 0.01);
-        bot.notes[i].forEach((n) => { n.fired = 0; n.done = 0; plan(i, n); });
+        bot.notes[i].forEach((n) => { cancel(n.tp); cancel(n.tr); if (!n.fired) { n.v = {}; n.tp = undefined; } });
         bot.cur[i] = null;
       }
+      PH.pen.fill(0); PH.prev = null; PH.half = 0.5;
+      bot.reacq = true; bot.lastT = null;
     }
+
+    // When the player pauses, the game's clock comes back ~60-70 ms further on after the countdown, so a note that was
+    // that close to the frets is counted as missed at once; and a key pressed right before the pause is swallowed (the
+    // game reads keys once per frame). So the pause key is held back until there is a gap: the last press is at least
+    // a frame old and no note is due in the next ~65 ms (at most CFG.pauseMax s, then the key goes through anyway).
+    let held = null;
+    const gap = () => { const now = clk(); if (now - bot.lastFire < 0.025) return false; for (const L of bot.notes) for (const n of L) if (!n.fired && n.nt > now - 0.03 && n.nt < now + CFG.pauseGap) return false; return true; };
+    const onKey = (e) => {
+      if (e.__gfbot || !/^(p|P|Escape)$/.test(e.key)) return;
+      if (held) { held.push(e); e.stopImmediatePropagation(); e.preventDefault(); return; }
+      if (e.type !== 'keydown' || !G.running || bot.paused || gap()) return;
+      held = [e]; e.stopImmediatePropagation(); e.preventDefault();
+      const t0 = performance.now();
+      const check = () => {
+        if (!gap() && performance.now() - t0 < CFG.pauseMax * 1000) { setTimeout(check, 4); return; }
+        const evs = held; held = null;
+        if (G.debug) bot.holds.push([+clk().toFixed(3), Math.round(performance.now() - t0), gap() ? 1 : 0]);
+        for (const o of evs) { const c = new w.KeyboardEvent(o.type, o); c.__gfbot = true; o.target.dispatchEvent(c); }
+      };
+      setTimeout(check, 4);
+    };
+    w.addEventListener('keydown', onKey, true); w.addEventListener('keyup', onKey, true);
 
     // ---- history: one session per play; results are read from the game's own results screen ----
     const texts = [];
@@ -332,7 +408,7 @@
       if (S < bot.lastS - 1) {                                    // new play (restart / new song)
         finishSession(false); releaseAll(); bot.songPresses = 0; bot.paused = false;
       } else if (bot.paused || S < bot.lastS - 0.05) {             // back from pause / small rewind
-        bot.paused = false; resume(S);
+        bot.paused = false; resume();
       }
       bot.lastS = S;
       if (!bot.session && S < 5) startSession();
@@ -346,7 +422,7 @@
     });
 
     bot.releaseAll = releaseAll; bot.PH = PH;
-    bot.dispose = () => { finishSession(false); releaseAll(); w.__gfParse = null; };
+    bot.dispose = () => { finishSession(false); releaseAll(); w.__gfParse = null; w.removeEventListener('keydown', onKey, true); w.removeEventListener('keyup', onKey, true); };
     bot.songTime = () => { try { return getS(); } catch (e) { return 0; } };
     return bot;
   }
