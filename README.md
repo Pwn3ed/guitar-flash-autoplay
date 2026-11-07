@@ -8,13 +8,16 @@ Guarda um histórico de todas as músicas tocadas (acertos, erros, overstrums, c
 Funciona em Chrome, Edge, Brave, Opera e Firefox, em qualquer sistema (Windows, Linux, macOS).
 
 ## Como funciona
-- **Visão:** depois de cada quadro desenhado, o bot lê só a faixa inferior do canvas WebGL do jogo, de forma
-  assíncrona (pixel-pack buffer + fence), sem travar a placa de vídeo.
-- **Tempo:** o jogo posiciona as notas pelo relógio do player do YouTube, em passos de 1/24 s (28 px por passo).
-  Cada nota vista vira um horário exato de acerto, e a tecla é apertada quando o relógio do vídeo chega nele;
-  por isso travadas e queda de FPS não atrasam os apertos.
-- **Filtros:** notas novas precisam entrar pelo topo da pista (descarta ecos e brilhos dos acertos); o clarão branco
-  do Special e as chamas dos acertos são reconhecidos para não esconder notas.
+- **Leitura da cena:** o bot intercepta os dados que o jogo envia à placa de vídeo (WebGL `bufferSubData` /
+  `drawElements`) e reconhece as notas pela região da textura (`notaN-v.png` no atlas do jogo). Nenhum pixel é lido,
+  então chamas, clarões do Special e efeitos de acerto não escondem nada.
+- **Tempo:** as notas ficam numa grade fixa, um passo por 1/24 s do relógio do jogo. Cada nota vira um horário exato
+  de acerto, e a tecla é apertada quando o relógio chega nele; travadas e queda de FPS não atrasam os apertos.
+- **Relógio do jogo:** o jogo tem relógio próprio, que fica alguns ms defasado do vídeo depois de travadas. O bot
+  mede essa defasagem continuamente pelo movimento das notas na pista; enquanto o vídeo carrega (buffering), o
+  relógio do jogo continua andando e o bot acompanha.
+- **Notas longas:** o rastro da nota longa (triângulo de stencil + quad) dá o fim exato, inclusive em acordes de
+  notas longas.
 - **Pausa:** ao pausar, o bot solta as teclas e congela a agenda; ao voltar, reagenda as notas que ainda não passaram.
 
 ## Pastas
@@ -36,7 +39,8 @@ No Firefox: `about:debugging#/runtime/this-firefox` → **Carregar extensão tem
 
 ## Usar
 1. Clique no ícone → **START** (o ícone mostra "ON").
-2. Abra uma música no guitarflash.com e aperte uma tecla para começar. O bot segue quando você troca de música.
+2. Abra uma música no guitarflash.com e aperte uma tecla (Enter) para começar. O bot segue quando você troca de música.
+   Comece com o teclado, não com clique do mouse: o jogo pode contar o clique como um overstrum antes da primeira nota.
 3. **STOP** para parar. Fechar o navegador também para, e ele sempre abre desligado.
 
 4. **Histórico de músicas** (botão no popup): tabela com todas as partidas, busca, exportação CSV/JSON.
