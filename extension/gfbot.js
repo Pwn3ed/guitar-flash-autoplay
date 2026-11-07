@@ -21,6 +21,7 @@
     newMaxY: 910,      // a NEW note must first appear above this y: real gems enter from the top (first seen at
                        // y~899-904, charts are aligned to the 1/24 s ticks); hit echoes / sustain glows show up lower
     Z0: 868, Z1: 1002, // gem detection zone (above the hit flames)
+    bufLead: 0.07,     // while the video buffers with a frozen clock, press notes up to this far ahead (s)
     KEYS: [['a', 'KeyA', 65], ['s', 'KeyS', 83], ['j', 'KeyJ', 74], ['k', 'KeyK', 75], ['l', 'KeyL', 76]],
   };
 
@@ -35,20 +36,12 @@
     };
     const getS = () => { const P = curP(); return P.__orig.call(P); };
 
-    const c = w.document.getElementById('gfCanvas');
-    const gl = c.getContext('webgl2') || c.getContext('webgl');
-
-    // run our code right after the game draws (same task -> drawing buffer still valid); hook each context once
-    if (!w.__afterRender) { w.__afterRender = []; w.__mtq = false; }
-    if (!gl.__gfHooked) {
-      gl.__gfHooked = true;
-      const de = gl.drawElements;
-      gl.drawElements = function () {
-        const r = de.apply(this, arguments);
-        if (!w.__mtq) { w.__mtq = true; w.queueMicrotask(() => { w.__mtq = false; for (const fn of w.__afterRender) { try { fn(); } catch (e) { w.__perr = String(e); } } }); }
-        return r;
-      };
-    }
+    // The game's own WebGL context, captured by hookDraws() the first time the game draws. NEVER call getContext()
+    // here: the canvas exists in the page before the game script creates its context, and calling getContext() first
+    // would create the context with default attributes (no stencil buffer, antialias on). The game would then get that
+    // context and draw its masked effects (sustain glow, key press) as solid coloured rectangles.
+    const gl = w.__gfGL;
+    const c = gl.canvas;
     w.__afterRender.length = 0;
     w.__mtq = false;
 
@@ -109,7 +102,7 @@
 
     const bot = {
       notes: [[], [], [], [], []], down: [0, 0, 0, 0, 0], cur: [null, null, null, null, null],
-      presses: 0, songPresses: 0, rejected: 0, frames: 0, ms: 0, lastS: -1, hb: performance.now(), fired: [], paused: false, lastState: -1, ignoreBefore: 0, graceUntil: 0, session: null, rej: [], seen: [], gapLog: [], lastProcS: -1, laneS: [-1, -1, -1, -1, -1],
+      presses: 0, songPresses: 0, rejected: 0, frames: 0, ms: 0, lastS: -1, hb: performance.now(), fired: [], paused: false, lastState: -1, ignoreBefore: 0, session: null, rej: [], seen: [], gapLog: [], lastProcS: -1, laneS: [-1, -1, -1, -1, -1],
     };
     const dispatch = w.Document.prototype.dispatchEvent;
     const send = (i, type) => { const [key, code, kc] = CFG.KEYS[i]; dispatch.call(w.document, new w.KeyboardEvent(type, { key, code, keyCode: kc, which: kc, bubbles: true, cancelable: true })); };
@@ -122,7 +115,7 @@
       if (n.fired || !G.running) return;
       n.fired = 1;
       if (bot.down[i]) send(i, 'keyup');
-        send(i, 'keydown'); bot.down[i] = 1; bot.cur[i] = n; bot.presses++; bot.songPresses++;
+      send(i, 'keydown'); bot.down[i] = 1; bot.cur[i] = n; bot.presses++; bot.songPresses++;
       if (bot.session) bot.session.presses++;
       if (G.debug && bot.fired.length < 5000) bot.fired.push({ S: getS(), i, nt: n.nt, y0: n.y0, sus: n.sus });
       planRelease(i, n);
@@ -150,15 +143,15 @@
       }
     }
     // Resume (or the clock jumped back a little): re-plan every note that has not reached the hit line yet. If the game
-    // rewound the song, notes that were already played are played again. For a moment, notes already in the middle of
-    // the highway are accepted as new (they did not "enter from the top" while we were not looking).
+    // rewound the song, notes that were already played are played again. The notes seen before the pause are kept, so
+    // the "new notes enter from the top" filter stays on: relaxing it here let hit echoes through as fake notes.
     function resume(S) {
       for (let i = 0; i < 5; i++) {
         bot.notes[i] = bot.notes[i].filter(n => n.nt > S - 0.01);
         bot.notes[i].forEach(n => { n.fired = 0; n.done = 0; n.relFinal = 0; plan(i, n); });
         bot.cur[i] = null;
       }
-      bot.ignoreBefore = S; bot.graceUntil = S + 0.4; bot.laneS = [-1, -1, -1, -1, -1];
+      bot.ignoreBefore = S; bot.laneS = [-1, -1, -1, -1, -1];
     }
 
     // ---- History: one session per play; results are read from the game's own results screen ----
@@ -222,16 +215,27 @@
       const st = P.getPlayerState ? P.getPlayerState() : 1;
       if (st === 0 && bot.lastState === 1) songEnded();                 // the song finished
       bot.lastState = st;
-      if (st !== 1) {                                                      // paused / buffering / ended
+      // Paused / ended / not started. Buffering (3) is NOT a pause: the music keeps going and the clock jumps forward
+      // when the video catches up (typically right after "Continue"); cancelling the presses there loses those notes.
+      // The scheduled presses simply follow the clock, so they wait while it is frozen and fire as it moves again.
+      if (st !== 1 && st !== 3) {
         if (!bot.paused) { bot.paused = true; pause(); if (bot.session && st === 2 && Snow > 1) bot.session.pauses++; }
         return;
       }
       if (Snow < bot.lastS - 1) {                                          // new play (restart / new song)
         finishSession(false);
         releaseAll(); bot.songPresses = 0; bot.lastProcS = -1; bot.laneS = [-1, -1, -1, -1, -1];
-        bot.paused = false; bot.ignoreBefore = 0; bot.graceUntil = 0;
+        bot.paused = false; bot.ignoreBefore = 0;
       } else if (bot.paused || Snow < bot.lastS - 0.05) {                  // back from pause / small rewind
         bot.paused = false; resume(Snow);
+      }
+      // Buffering with a frozen clock: the clock will jump forward when the video catches up, and notes inside the jump
+      // would pass the hit line at once (pressed too late). The game judges presses with this same frozen clock, so
+      // notes just ahead of it are pressed now: for the game they arrive slightly early, inside the hit window.
+      if (st === 3 && Snow === bot.lastS) {
+        for (let i = 0; i < 5; i++) for (const n of bot.notes[i]) {
+          if (!n.fired && n.nt > Snow - 0.1 && n.nt <= Snow + CFG.bufLead) { clearTimeout(n.tp); fire(i, n); }
+        }
       }
       bot.lastS = Snow;
       if (!bot.session && Snow < 5) startSession();
@@ -307,7 +311,7 @@
               plan(i, n);
             }
           } else {
-            if (y > newMaxY && bot.songPresses > 0 && S > bot.graceUntil) {             // hit echo / glow
+            if (y > newMaxY && bot.songPresses > 0) {                                   // hit echo / glow
               bot.rejected++;
               if (G.debug && bot.rej.length < 3000) bot.rej.push({ S, i, y, nt, lanes: cl.slice() });
               continue;
@@ -342,6 +346,27 @@
     return bot;
   }
 
+  // Hook drawElements on the WebGL context PROTOTYPES of the game window. This never creates a context: when the
+  // game draws, the hook sees the game's own context (`this`), remembers it, and after the frame runs our callbacks
+  // (same task, so the drawing buffer is still valid).
+  function hookDraws(w) {
+    if (!w.__afterRender) { w.__afterRender = []; w.__mtq = false; }
+    for (const name of ['WebGL2RenderingContext', 'WebGLRenderingContext']) {
+      const proto = w[name] && w[name].prototype;
+      if (!proto || proto.__gfHooked) continue;
+      proto.__gfHooked = true;
+      const de = proto.drawElements;
+      proto.drawElements = function () {
+        const r = de.apply(this, arguments);
+        if (this.canvas && this.canvas.id === 'gfCanvas') {
+          w.__gfGL = this;
+          if (!w.__mtq) { w.__mtq = true; w.queueMicrotask(() => { w.__mtq = false; for (const fn of w.__afterRender) { try { fn(); } catch (e) { w.__perr = String(e); } } }); }
+        }
+        return r;
+      };
+    }
+  }
+
   // attach to the game iframe (new song -> new document/canvas; reattach if frames stop arriving)
   let watcher = null, statusTimer = null, lastDoc = null, lastCanvas = null, lastSize = '';
   function tick() {
@@ -351,13 +376,16 @@
     const w = f && f.contentWindow;
     if (!w) return;
     try {
-      const d = w.document; const cv = d.getElementById('gfCanvas');
-      if (!cv || !window.ytPlayer || !window.ytPlayer.getCurrentTime) return;
-      // reattach on a new document / canvas, when the canvas is resized (it starts small while the song loads),
-      // or if frames stopped arriving (heartbeat older than 3 s)
+      hookDraws(w);
+      const gl = w.__gfGL, d = w.document;
+      if (!gl || !gl.canvas || !gl.canvas.isConnected || gl.isContextLost()) return;   // the game has not drawn yet
+      const cv = gl.canvas;
+      if (!window.ytPlayer || !window.ytPlayer.getCurrentTime) return;
+      // reattach only on a new document / canvas or when the canvas is resized (a new song). Frames that stop for a
+      // while (pause menu, hitch) are not a reason: the prototype hook cannot be lost, and reattaching would drop the
+      // scheduled notes and end the history session.
       const size = cv.width + 'x' + cv.height;
-      const stale = G.bot && performance.now() - G.bot.hb > 3000;
-      if (d === lastDoc && cv === lastCanvas && size === lastSize && !stale) return;
+      if (d === lastDoc && cv === lastCanvas && size === lastSize) return;
       if (G.bot) G.bot.dispose();
       G.bot = install(w); lastDoc = d; lastCanvas = cv; lastSize = size;
     } catch (e) { /* not ready yet */ }
