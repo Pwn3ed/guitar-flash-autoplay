@@ -1,168 +1,344 @@
-// Guitar Flash Bot - runs inside the guitarflash.com page (MAIN world).
+// Guitar Flash Autoplay - runs inside the guitarflash.com page (MAIN world).
 // Controlled by the extension (bridge.js) through window.postMessage: {source:'gfbot-ext', cmd:'start'|'stop'}.
 //
-// How it works: the game (PIXI/WebGL canvas in the same-origin iframe "iframeGame") computes note positions from
-// ytPlayer.getCurrentTime() quantized to 1/24 s (notes move 28 px per tick = 672 px/s near the hit line).
-// Right after each frame is drawn we read the lower part of the canvas, find the gems per lane, convert each gem
-// position into the song time at which it reaches the hit line, and press the key (A S J K L, synthetic
-// KeyboardEvents) when the YouTube clock reaches that time. Sustains are held until their tail end passes.
+// How it works ("scene reader"):
+//  - The game is a PIXI/WebGL app in the same-origin iframe "iframeGame". Every frame it uploads its sprites to the
+//    GPU (bufferSubData: x, y, u, v, colour, texture per vertex) and draws them (drawElements). We hook both on the
+//    WebGL prototypes and read that data directly - no pixels are read, so flashes, flames and hit effects do not
+//    hide anything.
+//  - Notes are the sprites whose texture region is "notaL-v.png" in the game's atlas (image2.json). The lane is taken
+//    from the sprite's position on the highway (with the Special active every note uses the same texture).
+//  - A note keeps its identity from frame to frame by position (all notes move down by the same number of steps).
+//  - Note positions sit on a fixed lattice: y(i) = Q0 + Q1*i + Q2*i^2, one step per 1/24 s of song time, i = 0 at the
+//    top of the highway and 38 at the frets. With the game clock (ytPlayer.getCurrentTime, quantized to 1/24 s and
+//    the renderer snaps to floor(clock * 24)) every note gets an exact time: noteTime = (X - N) / 24, N = i - tick.
+//  - A sustain is drawn as a lane-shaped stencil triangle followed by a quad; the quad's top edge is the sustain end,
+//    on the same lattice, which gives the release time.
+//  - Keys (A S J K L) are synthetic KeyboardEvents, pressed when the YouTube clock reaches each note time.
 (function () {
   'use strict';
   if (window.top !== window) return;
   if (window.GFBOT && window.GFBOT.stop) window.GFBOT.stop();
 
   const CFG = {
-    Yh: 1030,          // hit line (canvas px) used for timing
-    V: 672,            // note speed near the hit line (px per song-second)
-    off: 0,            // press offset (s)
-    tapHold: 0.030,    // how long a normal note is held (s)
-    relOff: 0.010,     // extra hold after a sustain tail ends (s)
-    minSus: 0.09,      // minimum sustain length to trust a tail measurement (s)
-    newMaxY: 910,      // a NEW note must first appear above this y: real gems enter from the top (first seen at
-                       // y~899-904, charts are aligned to the 1/24 s ticks); hit echoes / sustain glows show up lower
-    Z0: 868, Z1: 1002, // gem detection zone (above the hit flames)
+    X: 38.6,                          // note time in ticks = X - N (calibrated against the game's own hit timing)
+    edge: 0.06,                       // frames at least this close (in ticks) to a game tick boundary are skipped
+    phDecay: 0.985,                   // memory of the clock phase estimator (per frame)
+    Q: [203.0929, 0.90768, 0.186434], // highway lattice: y(i) = Q0 + Q1*i + Q2*i^2 (game world units, 822x580)
+    fretX: [228.5, 318.5, 407.5, 497.5, 587.5], // lane centres at the frets (sustain triangles -> lane)
+    laneX: [407.7, 0.2332, 125.7],    // perspective: lane = round((x - c) / (s * (y - y0))) + 2 (c = middle lane)
+    tapHold: 0.030,                   // how long a normal note is held (s)
+    relOff: 0.015,                    // hold a sustain this much past its end (s); holding a bit long costs nothing
+    newMaxI: 30,                      // new notes are only accepted above this lattice step (38 = frets)...
+    reacqMaxI: 39.4,                  // ... except in the first frame after a pause: up to the frets (a note can be right
+                                      //     there when the game pauses; keys are released, so no press sprites)
+    pauseGap: 0.065,                  // the pause key waits until no note is due within this time (s)...
+    pauseMax: 5,                      // ... but never longer than this (s)
+    voteDecay: 0.7,                   // weight kept by a note's older tick votes at each new sighting
     KEYS: [['a', 'KeyA', 65], ['s', 'KeyS', 83], ['j', 'KeyJ', 74], ['k', 'KeyK', 75], ['l', 'KeyL', 76]],
   };
+  const [Q0, Q1, Q2] = CFG.Q;
+  const yTop = Q0 - Q1 * Q1 / (4 * Q2);                         // lowest y the lattice formula can invert
+  const indexOf = (y) => (y <= yTop ? NaN : (-Q1 + Math.sqrt(Q1 * Q1 + 4 * Q2 * (y - Q0))) / (2 * Q2));
 
-  const G = window.GFBOT = { __v: 8, cfg: CFG, bot: null, running: false, debug: false };
+  const G = window.GFBOT = { __v: 10, cfg: CFG, bot: null, running: false, debug: false, atlas: null };
+
+  // ---- atlas: texture regions of the note sprites, from the game's own image2.json ----
+  let atlasLoading = null;
+  function loadAtlas(w) {
+    if (G.atlas || atlasLoading) return;
+    const entry = w.performance.getEntriesByType('resource').find((e) => /image2\.json/.test(e.name));
+    const url = entry ? entry.name : new URL('img/image2.json', w.location.href).href;
+    atlasLoading = fetch(url).then((r) => r.json()).then((j) => {
+      const W = j.meta.size.w, H = j.meta.size.h, notes = [];
+      for (const [name, f] of Object.entries(j.frames)) {
+        const m = /^nota(\d)-(\d)\.png$/.exec(name);
+        if (m) notes.push({ lane: +m[1] - 1, k: name, u: f.frame.x / W, v: f.frame.y / H });
+      }
+      if (notes.length) G.atlas = { notes };
+    }).catch(() => { }).finally(() => { atlasLoading = null; });
+  }
+
+  // ---- hooks on the game's WebGL prototypes (never creates a context) ----
+  function hookGL(w) {
+    if (!w.__afterRender) { w.__afterRender = []; w.__mtq = false; }
+    for (const name of ['WebGL2RenderingContext', 'WebGLRenderingContext']) {
+      const proto = w[name] && w[name].prototype;
+      if (!proto || proto.__gfScene) continue;
+      proto.__gfScene = true;
+      const bsd = proto.bufferSubData, de = proto.drawElements;
+      proto.bufferSubData = function (target, off, data) {
+        if (target === this.ARRAY_BUFFER && data && data.byteLength && this.canvas && this.canvas.id === 'gfCanvas') {
+          w.__gfUp = data.buffer ? new Float32Array(data.buffer, data.byteOffset, data.byteLength >> 2) : new Float32Array(data);
+        }
+        return bsd.apply(this, arguments);
+      };
+      proto.drawElements = function (mode, count) {
+        if (this.canvas && this.canvas.id === 'gfCanvas') {
+          w.__gfGL = this;
+          if (w.__gfParse && w.__gfUp) { try { w.__gfParse(w.__gfUp, count); } catch (e) { w.__perr = String(e); } }
+          w.__gfUp = null;
+          if (!w.__mtq) { w.__mtq = true; w.queueMicrotask(() => { w.__mtq = false; for (const fn of w.__afterRender) { try { fn(); } catch (e) { w.__perr = String(e); } } }); }
+        }
+        return de.apply(this, arguments);
+      };
+    }
+  }
 
   function install(w) {
-    // current YouTube player; remember the exact song time the game itself read for the frame being drawn
     const curP = () => {
       const P = window.ytPlayer;
       if (!P.__orig) { const ORIG = P.__orig = P.getCurrentTime; P.getCurrentTime = function () { const v = ORIG.apply(this, arguments); P.__lastS = v; return v; }; }
       return P;
     };
     const getS = () => { const P = curP(); return P.__orig.call(P); };
-
-    const c = w.document.getElementById('gfCanvas');
-    const gl = c.getContext('webgl2') || c.getContext('webgl');
-
-    // run our code right after the game draws (same task -> drawing buffer still valid); hook each context once
-    if (!w.__afterRender) { w.__afterRender = []; w.__mtq = false; }
-    if (!gl.__gfHooked) {
-      gl.__gfHooked = true;
-      const de = gl.drawElements;
-      gl.drawElements = function () {
-        const r = de.apply(this, arguments);
-        if (!w.__mtq) { w.__mtq = true; w.queueMicrotask(() => { w.__mtq = false; for (const fn of w.__afterRender) { try { fn(); } catch (e) { w.__perr = String(e); } } }); }
-        return r;
-      };
-    }
-    w.__afterRender.length = 0;
-    w.__mtq = false;
-
-    // All geometry below is in reference units of a 1644x1160 canvas (the size the game uses here); if the game
-    // creates the canvas at another resolution on another machine, pixel reads are scaled to the real size.
-    const y0 = 850, y1 = 1100, x0 = 330, x1 = 1310;
-    const sx = c.width / 1644, sy = c.height / 1160;
-    const ax0 = Math.floor(x0 * sx), ax1 = Math.ceil(x1 * sx), ay0 = Math.floor(y0 * sy), ay1 = Math.ceil(y1 * sy);
-    const AW = ax1 - ax0, AH = ay1 - ay0;
-    const buf = new Uint8Array(AW * AH * 4);
-    const colOf = []; for (let x = x0; x < x1; x++) colOf[x] = Math.min(AW - 1, Math.max(0, Math.round(x * sx) - ax0));
-    const rowOf = []; for (let y = y0; y < y1; y++) rowOf[y] = Math.min(AH - 1, Math.max(0, ay1 - 1 - Math.round(y * sy)));
-    const LG = [];
-    for (let i = 0; i < 5; i++) {
-      LG[i] = [];
-      for (let y = y0; y < y1; y++) {
-        const xl = 719 - 0.5625 * (y - 420), wd = 188.5 + 1.125 * (y - 420);
-        LG[i][y] = [Math.round(xl + wd * (i + 0.5) / 5), Math.round(wd * 0.085), Math.max(4, Math.round(wd * 0.018))];
-      }
-    }
-    const on = (x, y) => { const k = (rowOf[y] * AW + colOf[x]) * 4; const r = buf[k], g = buf[k + 1], b = buf[k + 2]; const mx = Math.max(r, g, b), mn = Math.min(r, g, b); return (mx - mn > 80 && mx > 110) || mn > 200; };
-    const wide = (i, y) => { const [cx, h] = LG[i][y]; let n = 0, t = 0; for (let x = cx - h; x <= cx + h; x += 2) { t++; if (on(x, y)) n++; } return n / t; };
-    const narrow = (i, y) => { const [cx, , h] = LG[i][y]; let n = 0, t = 0; for (let x = cx - h; x <= cx + h; x++) { t++; if (on(x, y)) n++; } return n / t; };
-    const hueOn = (i, k) => { const r = buf[k], g = buf[k + 1], b = buf[k + 2]; return i === 0 ? (g > 110 && g - r > 50 && g - b > 50) : (b > 110 && b - r > 50 && b - g > 20); };
-    const hueWide = (i, y) => { const [cx, h] = LG[i][y]; let n = 0, t = 0; for (let x = cx - h; x <= cx + h; x += 2) { t++; if (hueOn(i, (rowOf[y] * AW + colOf[x]) * 4)) n++; } return n / t; };
-    const satAvg = (i, y) => { const [cx, h] = LG[i][y]; let s = 0, t = 0; for (let x = cx - h; x <= cx + h; x += 2) { t++; const k = (rowOf[y] * AW + colOf[x]) * 4; s += Math.max(buf[k], buf[k + 1], buf[k + 2]) - Math.min(buf[k], buf[k + 1], buf[k + 2]); } return s / t; };
-    // Pixel readback. WebGL2: asynchronous (pixel-pack buffer + fence), so the GPU is never stalled - synchronous
-    // reads stall the pipeline, and with heavy use the game started drawing some effects as solid rectangles.
-    // The result of a frame is picked up a frame or two later together with the song time of that frame.
-    // WebGL1 fallback: synchronous read.
-    const isGL2 = typeof w.WebGL2RenderingContext !== 'undefined' && gl instanceof w.WebGL2RenderingContext;
-    // Every finished readback is processed, oldest first (none is skipped, even if the GPU returns several at once).
-    const ring = isGL2 ? Array.from({ length: 10 }, () => ({ pbo: gl.createBuffer(), sync: null, alloc: false })) : [];
-    let seq = 0;
-    function readFrames(Sq, S, process) {
-      if (!isGL2) { gl.readPixels(ax0, c.height - ay1, AW, AH, gl.RGBA, gl.UNSIGNED_BYTE, buf); process(S, Sq); return; }
-      const prev = gl.getParameter(gl.PIXEL_PACK_BUFFER_BINDING);
-      const done = ring.filter(r => r.sync && gl.getSyncParameter(r.sync, gl.SYNC_STATUS) === gl.SIGNALED).sort((a, b) => a.seq - b.seq);
-      // queue this frame first, so a slot is always free for the newest picture
-      let slot = ring.find(r => !r.sync && !done.includes(r)) || done[0];
-      if (slot) {
-        if (slot.sync && done.includes(slot)) { // reuse the oldest finished one after reading it
-          gl.bindBuffer(gl.PIXEL_PACK_BUFFER, slot.pbo); gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, buf);
-          gl.deleteSync(slot.sync); slot.sync = null; done.shift(); process(slot.S, slot.Sq);
-        }
-        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, slot.pbo);
-        if (!slot.alloc) { gl.bufferData(gl.PIXEL_PACK_BUFFER, AW * AH * 4, gl.STREAM_READ); slot.alloc = true; }
-        gl.readPixels(ax0, c.height - ay1, AW, AH, gl.RGBA, gl.UNSIGNED_BYTE, 0);
-        slot.sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0); slot.Sq = Sq; slot.S = S; slot.seq = ++seq;
-      }
-      for (const r of done) {
-        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, r.pbo); gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, buf);
-        gl.deleteSync(r.sync); r.sync = null; process(r.S, r.Sq);
-      }
-      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, prev);
-    }
-    function freeReadback() { for (const r of ring) { if (r.sync) gl.deleteSync(r.sync); r.sync = null; gl.deleteBuffer(r.pbo); } ring.length = 0; }
+    // The game's clock: the video clock, except while the video buffers. Then the video clock freezes but the game keeps
+    // running in real time (notes keep moving and are judged), and the video jumps ahead when it resumes. So during
+    // buffering the clock is extrapolated from the last moment the video clock was live.
+    // If the notes stop moving too (C.still frames without a step), the game clock is frozen as well: no extrapolation.
+    const C = { v: -1, t: 0, still: 0 };
+    const clk = () => {
+      const v = getS(), now = performance.now(), P = curP();
+      if (v !== C.v || C.still >= 4 || (P.getPlayerState && P.getPlayerState() !== 3)) { C.v = v; C.t = now; return v; }
+      return v + (now - C.t) / 1000;
+    };
 
     const bot = {
       notes: [[], [], [], [], []], down: [0, 0, 0, 0, 0], cur: [null, null, null, null, null],
-      presses: 0, songPresses: 0, rejected: 0, frames: 0, ms: 0, lastS: -1, hb: performance.now(), fired: [], paused: false, lastState: -1, ignoreBefore: 0, graceUntil: 0, session: null, rej: [], seen: [], gapLog: [], lastProcS: -1, laneS: [-1, -1, -1, -1, -1],
+      presses: 0, songPresses: 0, frames: 0, ms: 0, lastS: -1, hb: performance.now(), fired: [], events: [],
+      paused: false, lastState: -1, session: null, reacq: false, trace: [], born: [], fid: 0, lastT: null, lastFire: -1, holds: [],
     };
     const dispatch = w.Document.prototype.dispatchEvent;
     const send = (i, type) => { const [key, code, kc] = CFG.KEYS[i]; dispatch.call(w.document, new w.KeyboardEvent(type, { key, code, keyCode: kc, which: kc, bubbles: true, cancelable: true })); };
-    const releaseAll = () => { for (let i = 0; i < 5; i++) { if (bot.down[i]) send(i, 'keyup'); bot.down[i] = 0; bot.notes[i].forEach(n => { clearTimeout(n.tp); clearTimeout(n.tr); }); bot.notes[i] = []; bot.cur[i] = null; } };
+    const releaseAll = () => { for (let i = 0; i < 5; i++) { if (bot.down[i]) send(i, 'keyup'); bot.down[i] = 0; bot.notes[i].forEach((n) => { cancel(n.tp); cancel(n.tr); }); bot.notes[i] = []; bot.cur[i] = null; } };
 
     // run fn when the song clock reaches target (s)
-    function at(target, fn) { const go = () => { const dt = (target - getS()) * 1000; if (dt <= 0.5) { fn(); return null; } return setTimeout(go, dt > 6 ? dt - 3 : Math.max(0, dt - 0.5)); }; return go(); }
+    // (re-arms itself until the clock is there; the returned handle cancels the whole chain)
+    function at(target, fn) {
+      const h = { id: 0, off: false };
+      const go = () => { if (h.off) return; const dt = (target - clk()) * 1000; if (dt <= 0.5) { h.off = true; fn(); return; } h.id = setTimeout(go, dt > 6 ? dt - 3 : Math.max(0, dt - 0.5)); };
+      go(); return h;
+    }
+    const cancel = (h) => { if (h) { h.off = true; clearTimeout(h.id); } };
 
     function fire(i, n) {
       if (n.fired || !G.running) return;
       n.fired = 1;
       if (bot.down[i]) send(i, 'keyup');
-        send(i, 'keydown'); bot.down[i] = 1; bot.cur[i] = n; bot.presses++; bot.songPresses++;
+      send(i, 'keydown'); bot.down[i] = 1; bot.cur[i] = n; bot.presses++; bot.songPresses++; bot.lastFire = clk();
       if (bot.session) bot.session.presses++;
-      if (G.debug && bot.fired.length < 5000) bot.fired.push({ S: getS(), i, nt: n.nt, y0: n.y0, sus: n.sus });
+      if (G.debug && bot.fired.length < 5000) bot.fired.push({ t: performance.now(), S: clk(), i, nt: n.nt, sus: n.sus, rel: n.rel });
       planRelease(i, n);
     }
     function planRelease(i, n) {
-      clearTimeout(n.tr); if (!n.fired) return;
+      cancel(n.tr); if (!n.fired) return;
       let rt = n.rel || (n.sus ? n.nt + 8 : n.nt + CFG.tapHold);
-      const nx = bot.notes[i].find(m => m.nt > n.nt + 0.005);
-      if (nx) rt = Math.min(rt, nx.nt + CFG.off - 0.006);
+      const nx = bot.notes[i].find((m) => m.nt > n.nt + 0.005);
+      if (nx) rt = Math.min(rt, nx.nt - 0.006);
+      // let go before the video ends: a key still held when the song is over is counted as an overstrum
+      const dur = curP().getDuration ? curP().getDuration() : 0;
+      if (dur > 1) rt = Math.min(rt, Math.max(n.nt + 0.02, dur - 0.05));
       n.tr = at(rt, () => { if (bot.cur[i] === n && bot.down[i]) { send(i, 'keyup'); bot.down[i] = 0; } n.done = 1; });
     }
-    function plan(i, n) { clearTimeout(n.tp); if (n.fired) return; n.tp = at(n.nt + CFG.off, () => fire(i, n)); }
+    function plan(i, n) { cancel(n.tp); if (n.fired) return; n.tp = at(n.nt, () => fire(i, n)); }
 
-    // Background: inside the lane sampling windows the empty highway is dark gray and never counts as "on"
-    // (measured 0.00 in every calibration), so a fixed zero background is used - no calibration needed, which also
-    // works when notes are already on the highway at the countdown or an overlay is on screen.
-    bot.base = []; bot.baseN = [];
-    for (let i = 0; i < 5; i++) { bot.base[i] = []; bot.baseN[i] = []; for (let y = y0; y < y1; y++) { bot.base[i][y] = 0; bot.baseN[i][y] = 0; } }
+    // ---- per-frame scene: collected by the drawElements hook, processed after the frame ----
+    let frameNotes = [], frameTrails = [], lastTri = -1;
+    const fretX = CFG.fretX, atlasNotes = G.atlas.notes;
+    w.__gfParse = (fl, count) => {
+      if (count === 3) {                                        // stencil triangle of a sustain: remember its lane
+        const ys = [fl[1], fl[7], fl[13]], xs = [fl[0], fl[6], fl[12]];
+        const top = ys.indexOf(Math.min(...ys)); let cx = 0, k = 0;
+        for (let j = 0; j < 3; j++) if (j !== top) { cx += xs[j]; k++; }
+        cx /= k; let lane = 0, bd = 1e9;
+        fretX.forEach((x, j) => { const d = Math.abs(x - cx); if (d < bd) { bd = d; lane = j; } });
+        lastTri = lane; return;
+      }
+      const nq = Math.min(count / 6, fl.length / 24) | 0;
+      for (let q = 0; q < nq; q++) {
+        const b = q * 24;
+        const u0 = Math.min(fl[b + 2], fl[b + 8], fl[b + 14], fl[b + 20]), v0 = Math.min(fl[b + 3], fl[b + 9], fl[b + 15], fl[b + 21]);
+        const ymin = Math.min(fl[b + 1], fl[b + 7], fl[b + 13], fl[b + 19]), ymax = Math.max(fl[b + 1], fl[b + 7], fl[b + 13], fl[b + 19]);
+        if (lastTri >= 0 && nq === 1 && u0 === 0 && v0 === 0) { frameTrails.push({ lane: lastTri, y0: ymin, y1: ymax }); continue; }
+        for (const a of atlasNotes) {
+          if (Math.abs(a.u - u0) < 0.002 && Math.abs(a.v - v0) < 0.002) {
+            // the lane comes from the position, not the texture: with the Special active every note is drawn with the
+            // same (green) texture
+            const x = (fl[b] + fl[b + 6] + fl[b + 12] + fl[b + 18]) / 4, y = (ymin + ymax) / 2;
+            const lane = Math.round((x - CFG.laneX[0]) / (CFG.laneX[1] * (y - CFG.laneX[2]))) + 2;
+            if (lane >= 0 && lane <= 4) frameNotes.push({ lane, y, x, k: a.k });
+            break;
+          }
+        }
+      }
+      lastTri = -1;
+    };
 
-    // Pause: release keys and cancel the scheduled presses, but keep the notes already seen.
+    // ---- game clock phase ----
+    // The game keeps its own clock: it snaps notes to floor(gameTime * 24) and re-syncs gameTime to the video now and
+    // then (start, hitches, pauses), so gameTime = videoTime - b/24 with an offset b (in ticks) that is ~0 at the start
+    // but can change. b is measured from the scene: between two frames all notes step down the highway by the number of
+    // game ticks that passed, and that count must equal floor(T1 - b) - floor(T0 - b) (T = video time * 24). Every
+    // frame pair votes against the phases it rules out; the least-contradicted phase interval wins.
+    const PH = { pen: new Float32Array(100), prev: null, b: 0, half: 0.5 };
+    function updatePhase(T, cells) {
+      const prev = PH.prev; PH.prev = { T, cells }; PH.steps = null;
+      if (!prev || cells.length < 2 || prev.cells.length < 2) return;
+      const old = new Set(prev.cells);
+      let best = -1, bc = 0, sc = 0;
+      for (let st = 0; st <= 4; st++) {
+        let c = 0; for (const k of cells) if (old.has(k - st)) c++;
+        if (c > bc) { sc = bc; bc = c; best = st; } else if (c > sc) sc = c;
+      }
+      if (bc < 2 || bc === sc || bc < 0.6 * Math.min(cells.length, prev.cells.length)) return;   // ambiguous motion
+      PH.steps = best;                                                  // game ticks since the previous frame
+      if (!(T > prev.T) || T - prev.T > 3) return;
+      const pen = PH.pen;
+      for (let k = 0; k < 100; k++) {
+        const b = (k + 0.5) / 100;
+        pen[k] = pen[k] * CFG.phDecay + ((Math.floor(T - b) - Math.floor(prev.T - b)) === best ? 0 : 1);
+      }
+      let m = 0; for (let k = 1; k < 100; k++) if (pen[k] < pen[m]) m = k;
+      const lim = pen[m] + 0.5; let lo = 0, hi = 0;
+      while (lo < 99 && pen[(m - lo - 1 + 100) % 100] <= lim) lo++;
+      while (hi < 99 && pen[(m + hi + 1) % 100] <= lim) hi++;
+      const c = ((m + (hi - lo) / 2 + 0.5) / 100 + 1) % 1;
+      PH.half = (lo + hi + 1) / 200;
+      PH.b = c + Math.round(PH.b - c);                                  // keep b continuous (no whole-tick jumps)
+    }
+
+    function processScene(S, Sg) {
+      const T = Sg * 24;
+      // lattice cell of every note sprite on the open highway (the fret row is excluded: hit/press sprites stay there)
+      const sprites = [];
+      // (one sprite per lane and step: some notes, like the Special ones, are drawn as two sprites in the same place)
+      const seenCell = new Set();
+      for (const fn of frameNotes) {
+        const i = indexOf(fn.y); if (!(i >= -0.5)) continue;
+        const r = Math.round(i), key = fn.lane * 1000 + r;
+        if (!seenCell.has(key)) { seenCell.add(key); sprites.push({ lane: fn.lane, i, r, x: fn.x, k: fn.k }); }
+      }
+      updatePhase(T, sprites.filter((p) => p.r >= 1 && p.r <= 35).map((p) => p.lane * 1000 + p.r));
+      const b = PH.b, gt = Math.floor(T - b), fr = T - b - gt;
+      // Visual tracking: between two frames every note moves down by the same number of steps, so a note seen last
+      // frame at row r is the sprite at r + steps now. This keeps a note's identity even when a clock jumps (the game
+      // re-syncing, or the video clock after buffering), which would otherwise turn the same note into a new one.
+      const fid = ++bot.fid, T0 = bot.lastT; bot.lastT = T;
+      let steps = PH.steps != null ? PH.steps : (T0 != null && T > T0 ? Math.floor(T - b) - Math.floor(T0 - b) : null);
+      if (bot.reacq) {                  // first frame after a pause: the shift since the last frame before it, by overlap
+        let bc = 0; steps = null;
+        for (let st = 0; st <= 3; st++) {          // (the game comes back 1-2 ticks further on)
+          let c = 0; for (const p of sprites) if (bot.notes[p.lane].some((m) => m.seen === fid - 1 && m.r + st === p.r)) c++;
+          if (c > bc) { bc = c; steps = st; }
+        }
+      }
+      const claimed = new Set();
+      if (steps != null) {
+        for (const p of sprites) {
+          const n = bot.notes[p.lane].find((m) => m.seen === fid - 1 && m.r + steps === p.r && !claimed.has(m));
+          if (n) { p.n = n; claimed.add(n); }
+        }
+      }
+      for (const p of sprites) if (p.n) { p.n.r = p.r; p.n.seen = fid; }
+      // near a game tick boundary the phase is uncertain: this frame could be one tick off, so it is not used
+      const margin = Math.min(0.3, Math.max(CFG.edge, PH.half + 0.02));
+      if (G.debug) { bot.trace.push([performance.now() | 0, +S.toFixed(4), +b.toFixed(3), +PH.half.toFixed(3), PH.steps, gt, +fr.toFixed(2), sprites.map((p) => p.lane + ':' + p.i.toFixed(2) + ':' + p.x.toFixed(1) + ':' + p.k).join(' ')]); if (bot.trace.length > 20000) bot.trace.splice(0, 5000); }
+      // (except the first frame after a pause: notes at the frets must be taken now; votes fix their tick later)
+      if (!bot.reacq && (fr < margin || fr > 1 - margin)) return;
+      const timeOf = (i) => (CFG.X - (i - gt) + b) / 24;
+      for (const p of sprites) {
+        const N = p.r - gt, nt = timeOf(p.r);
+        if (nt < S - (bot.reacq ? 0.045 : 0.03)) continue;
+        const L = bot.notes[p.lane];
+        // the same note: tracked from the last frame, or else within one tick of a known note
+        let n = p.n || null, bd = 2;
+        if (!n) for (const m of L) { const d = Math.abs(m.N - N); if (d <= 1 && d < bd) { bd = d; n = m; } }
+        // A NEW note must be seen well above the frets: real notes come down from the top of the highway, while the
+        // game also draws a note sprite on the fret when a key is pressed (press feedback) - that must never become
+        // a note, or every press would schedule another one.
+        // (right after a resume nothing is pressed, so the first frame takes every note down to the frets)
+        if (!n && p.i > (bot.reacq ? CFG.reacqMaxI : CFG.newMaxI)) continue;
+        if (!n) {
+          n = { N, v: {}, nt, rel: 0, sus: 0 };
+          L.push(n);
+          if (G.debug) bot.born.push([performance.now() | 0, +S.toFixed(4), p.lane, N, +p.i.toFixed(2), +nt.toFixed(4), bot.reacq ? 1 : 0]);
+        }
+        claimed.add(n); n.r = p.r; n.seen = fid;
+        // votes for the note's tick (they fix a frame that was one tick off); old votes fade so that after a clock jump
+        // the note follows the new clock within a few frames
+        for (const k in n.v) n.v[k] *= CFG.voteDecay;
+        n.v[N] = (n.v[N] || 0) + 1;
+        let mN = n.N, mc = -1; for (const k in n.v) if (n.v[k] > mc) { mc = n.v[k]; mN = +k; }
+        n.N = mN;
+        const want = (CFG.X - mN + b) / 24;
+        if (!n.fired && (n.tp === undefined || Math.abs(want - n.nt) > 0.0015)) {
+          n.nt = want; L.sort((x, y) => x.nt - y.nt); plan(p.lane, n);
+          const pv = L[L.indexOf(n) - 1]; if (pv && pv.fired && !pv.done) planRelease(p.lane, pv);
+        }
+      }
+      bot.reacq = false;
+      for (const tr of frameTrails) {
+        const L = bot.notes[tr.lane];
+        // the trail starts at its note (bottom edge); while held, the bottom stays at the frets
+        const ib = indexOf(tr.y1); const ntb = isNaN(ib) ? NaN : timeOf(Math.round(ib));
+        let n = L.find((m) => Math.abs(m.nt - ntb) < 0.05);
+        if (!n) n = L.filter((m) => m.fired && !m.done).pop();      // the sustain being held now
+        if (!n) continue;
+        n.sus = 1;
+        const it = indexOf(tr.y0);
+        if (!isNaN(it)) {                                            // the end of the sustain is visible
+          const rel = timeOf(it) + CFG.relOff;
+          if (rel > n.nt + 0.05 && (!n.rel || Math.abs(rel - n.rel) > 0.004)) { n.rel = rel; planRelease(tr.lane, n); }
+        } else if (n.rel) { n.rel = 0; planRelease(tr.lane, n); }  // end above the top again: keep holding
+      }
+      for (const L of bot.notes) while (L.length && L[0].done && L[0].nt < S - 1) L.shift();
+    }
+
+    // ---- pause / buffering ----
     function pause() {
+      C.v = -1;
       for (let i = 0; i < 5; i++) {
         if (bot.down[i]) { send(i, 'keyup'); bot.down[i] = 0; }
-        bot.notes[i].forEach(n => { clearTimeout(n.tp); clearTimeout(n.tr); });
+        bot.notes[i].forEach((n) => { cancel(n.tp); cancel(n.tr); });
       }
     }
-    // Resume (or the clock jumped back a little): re-plan every note that has not reached the hit line yet. If the game
-    // rewound the song, notes that were already played are played again. For a moment, notes already in the middle of
-    // the highway are accepted as new (they did not "enter from the top" while we were not looking).
-    function resume(S) {
+    // Resume (or the clock jumped back): after the pause countdown the game re-syncs its own clock, which can move it by
+    // whole ticks relative to the video, so every note's time is measured again from scratch (fresh votes, the phase
+    // estimator starts over). The notes themselves are kept: the first frame finds them again by how far the highway
+    // moved, so a note already played before the pause is not played again. That frame may also take new notes down
+    // to the frets.
+    function resume() {
       for (let i = 0; i < 5; i++) {
-        bot.notes[i] = bot.notes[i].filter(n => n.nt > S - 0.01);
-        bot.notes[i].forEach(n => { n.fired = 0; n.done = 0; n.relFinal = 0; plan(i, n); });
+        bot.notes[i].forEach((n) => { cancel(n.tp); cancel(n.tr); if (!n.fired) { n.v = {}; n.tp = undefined; } });
         bot.cur[i] = null;
       }
-      bot.ignoreBefore = S; bot.graceUntil = S + 0.4; bot.laneS = [-1, -1, -1, -1, -1];
+      PH.pen.fill(0); PH.prev = null; PH.half = 0.5;
+      bot.reacq = true; bot.lastT = null;
     }
 
-    // ---- History: one session per play; results are read from the game's own results screen ----
-    // The game draws its texts (HUD and results screen) with canvas 2D fillText: keep the recent ones.
+    // When the player pauses, the game's clock comes back ~60-70 ms further on after the countdown, so a note that was
+    // that close to the frets is counted as missed at once; and a key pressed right before the pause is swallowed (the
+    // game reads keys once per frame). So the pause key is held back until there is a gap: the last press is at least
+    // a frame old and no note is due in the next ~65 ms (at most CFG.pauseMax s, then the key goes through anyway).
+    let held = null;
+    const gap = () => { const now = clk(); if (now - bot.lastFire < 0.025) return false; for (const L of bot.notes) for (const n of L) if (!n.fired && n.nt > now - 0.03 && n.nt < now + CFG.pauseGap) return false; return true; };
+    const onKey = (e) => {
+      if (e.__gfbot || !/^(p|P|Escape)$/.test(e.key)) return;
+      if (held) { held.push(e); e.stopImmediatePropagation(); e.preventDefault(); return; }
+      if (e.type !== 'keydown' || !G.running || bot.paused || gap()) return;
+      held = [e]; e.stopImmediatePropagation(); e.preventDefault();
+      const t0 = performance.now();
+      const check = () => {
+        if (!gap() && performance.now() - t0 < CFG.pauseMax * 1000) { setTimeout(check, 4); return; }
+        const evs = held; held = null;
+        if (G.debug) bot.holds.push([+clk().toFixed(3), Math.round(performance.now() - t0), gap() ? 1 : 0]);
+        for (const o of evs) { const c = new w.KeyboardEvent(o.type, o); c.__gfbot = true; o.target.dispatchEvent(c); }
+      };
+      setTimeout(check, 4);
+    };
+    w.addEventListener('keydown', onKey, true); w.addEventListener('keyup', onKey, true);
+
+    // ---- history: one session per play; results are read from the game's own results screen ----
     const texts = [];
     try {
       const C2 = w.CanvasRenderingContext2D.prototype;
@@ -172,15 +348,14 @@
       }
       w.__gfTextSink = (s) => { texts.push([performance.now(), s]); if (texts.length > 600) texts.splice(0, 200); };
     } catch (e) { }
-
     function startSession() {
       const info = songInfo();
       bot.session = { id: Date.now() + '-' + Math.random().toString(36).slice(2, 7), startedAt: new Date().toISOString(),
         title: info.title, artist: info.artist, difficulty: info.difficulty, mode: info.mode,
         duration: Math.round((curP().getDuration && curP().getDuration()) || 0), presses: 0, maxS: 0, pauses: 0 };
     }
-    // Results screen: the numbers are drawn in this order: score, max combo, percentage, notes hit, overstrums,
-    // notes missed, then special as "a / b" (labels are in the site's language, so only the order is used).
+    // Results screen numbers, in drawing order: score, max combo, percentage, notes hit, overstrums, notes missed,
+    // then special as "a / b" (labels are in the site's language, so only the order is used).
     function readResults() {
       for (let k = texts.length - 1; k >= 0; k--) {
         const m = /^(\d+)\s*\/\s*(\d+)$/.exec(texts[k][1].trim());
@@ -204,162 +379,70 @@
     function songEnded() {
       const s = bot.session; if (!s) return;
       let tries = 0;
-      const poll = () => {                                   // the results screen appears a moment after the song
+      const poll = () => {
         const r = readResults();
         if (r || ++tries > 20) { if (bot.session === s) finishSession(true, r); return; }
         setTimeout(poll, 300);
       };
       setTimeout(poll, 800);
     }
-    bot.finishSession = finishSession;
 
+    w.__afterRender.length = 0;
+    w.__mtq = false;
     w.__afterRender.push(() => {
       const t = performance.now();
       bot.hb = t;
+      const notes = frameNotes, trails = frameTrails; frameNotes = []; frameTrails = []; lastTri = -1;
       if (!G.running) return;
-      const Snow = getS();
-      const P = curP();
+      const S = getS(); const P = curP();
+      const Sc = clk();                                         // also keeps the buffering clock anchored
       const st = P.getPlayerState ? P.getPlayerState() : 1;
-      if (st === 0 && bot.lastState === 1) songEnded();                 // the song finished
+      if (G.debug && st !== bot.lastState && bot.events.length < 500) bot.events.push([+S.toFixed(3), st]);
+      if (st === 0 && bot.lastState === 1) songEnded();
       bot.lastState = st;
-      if (st !== 1) {                                                      // paused / buffering / ended
-        if (!bot.paused) { bot.paused = true; pause(); if (bot.session && st === 2 && Snow > 1) bot.session.pauses++; }
+      // paused / ended / not started (buffering = 3 is not a pause: the music goes on and the clock catches up)
+      if (st !== 1 && st !== 3) {
+        if (!bot.paused) { bot.paused = true; pause(); if (bot.session && st === 2 && S > 1) bot.session.pauses++; }
         return;
       }
-      if (Snow < bot.lastS - 1) {                                          // new play (restart / new song)
-        finishSession(false);
-        releaseAll(); bot.songPresses = 0; bot.lastProcS = -1; bot.laneS = [-1, -1, -1, -1, -1];
-        bot.paused = false; bot.ignoreBefore = 0; bot.graceUntil = 0;
-      } else if (bot.paused || Snow < bot.lastS - 0.05) {                  // back from pause / small rewind
-        bot.paused = false; resume(Snow);
+      if (S < bot.lastS - 1) {                                    // new play (restart / new song)
+        finishSession(false); releaseAll(); bot.songPresses = 0; bot.paused = false;
+      } else if (bot.paused || S < bot.lastS - 0.05) {             // back from pause / small rewind
+        bot.paused = false; resume();
       }
-      bot.lastS = Snow;
-      if (!bot.session && Snow < 5) startSession();
-      if (bot.session) bot.session.maxS = Math.max(bot.session.maxS, Snow);
-      const Sg = P.__lastS != null ? P.__lastS : Snow;
-      // request this frame's pixels; every finished readback is processed with the song time of ITS frame
-      readFrames(Math.floor(Sg * 24 + 1e-6) / 24, Snow, (S, Sq) => { if (S <= Snow + 0.5 && S >= bot.ignoreBefore) processFrame(S, Sq); });
+      bot.lastS = S;
+      if (!bot.session && S < 5) startSession();
+      if (bot.session) bot.session.maxS = Math.max(bot.session.maxS, S);
+      frameNotes = notes; frameTrails = trails;
+      // notes were positioned with the clock the game read this frame (extrapolated while buffering)
+      processScene(Sc, st === 3 ? Sc : (P.__lastS != null ? P.__lastS : S));
+      frameNotes = []; frameTrails = [];
+      if (st === 3) { if (PH.steps === 0) C.still++; else if (PH.steps > 0) C.still = 0; } else C.still = 0;
       bot.frames++; bot.ms += performance.now() - t;
     });
 
-    function processFrame(S, Sq) {
-      if (S < bot.lastProcS - 1) bot.laneS = [-1, -1, -1, -1, -1];   // restart
-      bot.lastProcS = S;
-
-      for (let i = 0; i < 5; i++) {
-        // Runs taller than any gem are not gems: a run covering the TOP of the lane is the game's white flash
-        // (special activation) -> the note entry area is hidden ("top blind"); a tall run coming from below is the
-        // hit flame of a held note -> ignored. Separate gems in the same lane are still used.
-        // A gem riding on top of a hit flame merges with it into one tall run. Between them the colour saturation dips
-        // (gem ~180, gap ~100, flame rising from ~130), so a strong peak followed by a dip marks a gem at the top.
-        let s = -1, e = -1, topBlind = false; const cl = [];
-        const gemOnTop = (top) => {
-          let peak = 0;
-          for (let y = top; y <= top + 52 && y < y1; y += 2) {
-            const v = satAvg(i, y);
-            if (y - top >= 16 && peak >= 120 && v < peak * 0.65) return (top + y) / 2;   // gem = [top, dip]
-            if (v > peak) peak = v;
-          }
-          return 0;
-        };
-        // Green and blue gems can also be found INSIDE a flame (flames are red/orange/yellow, never green or blue).
-        const gemsByHue = (a, b) => {
-          const out = []; let hs = -1, he = -1;
-          for (let y = a; y <= b + 2; y += 2) {
-            if (y <= b && hueWide(i, y) > 0.35) { if (hs < 0) hs = y; he = y; }
-            else if (hs >= 0 && y - he > 4) { if (he - hs >= 10 && he - hs <= 50) out.push((hs + he) / 2); hs = -1; }
-          }
-          return out;
-        };
-        const endRun = () => {
-          if (e - s > 70) {
-            if (s <= CFG.Z0 + 20) topBlind = true;
-            else if (i === 0 || i === 3) cl.push(...gemsByHue(s, e));
-            else { const g = gemOnTop(s); if (g) cl.push(g); }
-          }
-          else if (e - s >= 10 && s > CFG.Z0) cl.push((s + e) / 2);
-          s = -1;
-        };
-        for (let y = CFG.Z0; y <= CFG.Z1; y += 2) {
-          const g = wide(i, y) - bot.base[i][y] > 0.4;
-          if (g) { if (s < 0) s = y; e = y; } else if (s >= 0 && y - e > 4) endRun();
-        }
-        if (s >= 0 && e - s > 70 && s <= CFG.Z0 + 20) topBlind = true;   // (a gem cut off at Z1 is not used)
-        // If the entry area of this lane was not seen for a while (flash, GPU readback hiccup), a new note may first be
-        // seen lower than usual: widen the "new notes enter from the top" limit by the distance notes travelled.
-        const gap = bot.laneS[i] >= 0 ? Math.max(0, S - bot.laneS[i] - 0.025) : 0;
-        const newMaxY = CFG.newMaxY + CFG.V * gap;
-        if (G.debug && gap > 0.02 && !topBlind && bot.gapLog.length < 2000) bot.gapLog.push([S, i, Math.round((gap + 0.025) * 1000)]);
-        if (!topBlind) bot.laneS[i] = S;
-        const L = bot.notes[i];
-        if (G.debug && cl.length && bot.seen.length < 60000) bot.seen.push([S, i, cl.map(Math.round)]);
-        for (const y of cl) {
-          const nt = Sq + (CFG.Yh - y) / CFG.V;
-          if (nt < S - 0.02) continue;
-          const hasTail = (() => { let q = 0; for (let yy = Math.round(y) - 46; yy <= Math.round(y) - 26; yy += 5) { if (yy < y0) continue; if (narrow(i, yy) - bot.baseN[i][yy] > 0.55 && wide(i, yy) - bot.base[i][yy] < 0.4) q++; } return q >= 3; })();
-          const win = S < 1 ? 0.12 : 0.05;           // the YouTube clock jumps when playback starts
-          let n = L.find(m => Math.abs(m.nt - nt) < win);
-          if (n) {
-            if (hasTail) n.sus = 1;
-            if (!n.fired) {
-              if (nt < n.nt - 0.02) { n.nt = nt; n.k = 1; }                       // a +1 tick late estimate came first
-              else if (Math.abs(nt - n.nt) < 0.02) { n.k++; n.nt += (nt - n.nt) / n.k; }
-              plan(i, n);
-            }
-          } else {
-            if (y > newMaxY && bot.songPresses > 0 && S > bot.graceUntil) {             // hit echo / glow
-              bot.rejected++;
-              if (G.debug && bot.rej.length < 3000) bot.rej.push({ S, i, y, nt, lanes: cl.slice() });
-              continue;
-            }
-            n = { nt, k: 1, rel: 0, sus: hasTail ? 1 : 0, y0: y };
-            L.push(n); L.sort((a, b) => a.nt - b.nt); plan(i, n);
-            const pv = L[L.indexOf(n) - 1]; if (pv && pv.fired && !pv.done) planRelease(i, pv);
-          }
-        }
-        while (L.length && L[0].done && L[0].nt < S - 1) L.shift();
-
-        // sustains: measure where the tail ends and hold until it reaches the hit line
-        for (const n of L.filter(n => n.sus && !n.done && !n.relFinal)) {
-          let seen = 0, top = -1;
-          for (let y = 975; y > y0 + 2; y -= 3) { if (narrow(i, y) - bot.baseN[i][y] > 0.55) { seen++; top = y; } else if (seen > 0 && top - y > 15) break; }
-          if (seen >= 3 && top > y0 + 12 && top < 975) {
-            const rel = Sq + (CFG.Yh - top) / CFG.V + CFG.relOff;
-            if (rel > n.nt + CFG.minSus) {
-              (n.ests = n.ests || []).push(rel);
-              const a = [...n.ests].sort((p, q) => p - q), med = a[a.length >> 1];
-              if (a.length >= 2 && (!n.rel || Math.abs(med - n.rel) > 0.004)) { n.rel = med; planRelease(i, n); }
-            }
-          }
-          if (seen === 0 && n.fired && n.rel && S > n.rel - 0.02) n.relFinal = 1;
-        }
-      }
-    }
-
-    bot.releaseAll = releaseAll;
-    bot.dispose = () => { finishSession(false); releaseAll(); try { freeReadback(); } catch (e) { } };
+    bot.releaseAll = releaseAll; bot.PH = PH;
+    bot.dispose = () => { finishSession(false); releaseAll(); w.__gfParse = null; w.removeEventListener('keydown', onKey, true); w.removeEventListener('keyup', onKey, true); };
     bot.songTime = () => { try { return getS(); } catch (e) { return 0; } };
     return bot;
   }
 
-  // attach to the game iframe (new song -> new document/canvas; reattach if frames stop arriving)
-  let watcher = null, statusTimer = null, lastDoc = null, lastCanvas = null, lastSize = '';
+  // attach to the game iframe (a new song = a new document)
+  let watcher = null, statusTimer = null, lastDoc = null;
   function tick() {
-    // replaced by a newer instance: shut down only our own timers (the render queue now belongs to the new one)
     if (window.GFBOT !== G) { G.running = false; clearInterval(watcher); clearInterval(statusTimer); return; }
-    const f = [...document.querySelectorAll('iframe')].find(f => (f.src || '').includes('iframeGame'));
+    const f = [...document.querySelectorAll('iframe')].find((f) => (f.src || '').includes('iframeGame'));
     const w = f && f.contentWindow;
     if (!w) return;
     try {
-      const d = w.document; const cv = d.getElementById('gfCanvas');
-      if (!cv || !window.ytPlayer || !window.ytPlayer.getCurrentTime) return;
-      // reattach on a new document / canvas, when the canvas is resized (it starts small while the song loads),
-      // or if frames stopped arriving (heartbeat older than 3 s)
-      const size = cv.width + 'x' + cv.height;
-      const stale = G.bot && performance.now() - G.bot.hb > 3000;
-      if (d === lastDoc && cv === lastCanvas && size === lastSize && !stale) return;
+      hookGL(w);
+      const d = w.document, gl = w.__gfGL;
+      if (!gl || !gl.canvas || !gl.canvas.isConnected || gl.isContextLost()) return;   // the game has not drawn yet
+      if (!window.ytPlayer || !window.ytPlayer.getCurrentTime) return;
+      if (!G.atlas) { loadAtlas(w); return; }
+      if (d === lastDoc) return;
       if (G.bot) G.bot.dispose();
-      G.bot = install(w); lastDoc = d; lastCanvas = cv; lastSize = size;
+      G.bot = install(w); lastDoc = d;
     } catch (e) { /* not ready yet */ }
   }
   // Song info from the page's fixed elements (works in every language of the site):
@@ -388,8 +471,8 @@
 
   G.start = () => {
     if (G.running) return 'running';
-    G.running = true; lastDoc = null; lastCanvas = null; lastSize = '';
-    watcher = setInterval(tick, 1000); tick();
+    G.running = true; lastDoc = null;
+    watcher = setInterval(tick, 250); tick();
     statusTimer = setInterval(postStatus, 1000); postStatus();
     return 'running';
   };
@@ -403,7 +486,7 @@
   };
 
   window.addEventListener('message', (e) => {
-    if (window.GFBOT !== G) return;                 // a newer instance replaced this one: never react again
+    if (window.GFBOT !== G) return;
     if (e.source !== window || !e.data || e.data.source !== 'gfbot-ext') return;
     if (e.data.cmd === 'start') G.start(); else if (e.data.cmd === 'stop') G.stop();
   });
