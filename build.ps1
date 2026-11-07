@@ -1,6 +1,6 @@
 ﻿# Builds the store packages from .\extension into .\dist
-#   guitar-flash-autoplay-chromium-<ver>.zip  -> Chrome Web Store, Edge Add-ons, Opera Add-ons (Brave uses the Chrome Web Store)
-#   guitar-flash-autoplay-firefox-<ver>.zip   -> addons.mozilla.org
+#   guitar-flash-bot-chromium-<ver>.zip  -> Chrome Web Store, Edge Add-ons, Opera Add-ons (Brave uses the Chrome Web Store)
+#   guitar-flash-bot-firefox-<ver>.zip   -> addons.mozilla.org
 # Usage:  powershell -ExecutionPolicy Bypass -File .\build.ps1
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
@@ -31,23 +31,23 @@ function Write-Zip([string]$zipPath, [string]$manifestJson) {
 $m = Get-Content (Join-Path $src 'manifest.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 $m.background = [pscustomobject]@{ service_worker = 'background.js' }
 $m.PSObject.Properties.Remove('browser_specific_settings')
-Write-Zip (Join-Path $dist "guitar-flash-autoplay-chromium-$ver.zip") ($m | ConvertTo-Json -Depth 10)
+Write-Zip (Join-Path $dist "guitar-flash-bot-chromium-$ver.zip") ($m | ConvertTo-Json -Depth 10)
 
 # Firefox: event-page background (scripts), keep gecko settings
 $m = Get-Content (Join-Path $src 'manifest.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 $m.background = [pscustomobject]@{ scripts = @('background.js') }
-Write-Zip (Join-Path $dist "guitar-flash-autoplay-firefox-$ver.zip") ($m | ConvertTo-Json -Depth 10)
+Write-Zip (Join-Path $dist "guitar-flash-bot-firefox-$ver.zip") ($m | ConvertTo-Json -Depth 10)
 
 Get-ChildItem $dist | Select-Object Name, Length | Format-Table -AutoSize
 
 # Installer folder for Chrome/Edge/Brave ("Carregar sem compactacao"), next to the project folder:
-#   ..\guitar-flash-autoplay-INSTALADOR
+#   ..\guitar-flash-bot-INSTALADOR
 # It is regenerated on every build; after building, click the reload button of the extension in chrome://extensions.
-$inst = Join-Path (Split-Path $root -Parent) 'guitar-flash-autoplay-INSTALADOR'
+$inst = Join-Path (Split-Path $root -Parent) 'guitar-flash-bot-INSTALADOR'
 if (Test-Path $inst) { Get-ChildItem $inst -Force | Remove-Item -Recurse -Force } else { New-Item -ItemType Directory $inst | Out-Null }
-Expand-Archive (Join-Path $dist "guitar-flash-autoplay-chromium-$ver.zip") -DestinationPath $inst
+Expand-Archive (Join-Path $dist "guitar-flash-bot-chromium-$ver.zip") -DestinationPath $inst
 $note = @"
-GUITAR FLASH AUTOPLAY - INSTALADOR (Chrome / Edge / Brave / Opera)
+GUITAR FLASH BOT - INSTALADOR (Chrome / Edge / Brave / Opera)
 Versao $ver - gerado automaticamente pelo build.ps1 do projeto. Nao edite os arquivos daqui.
 
 Instalar:
@@ -56,7 +56,7 @@ Instalar:
  3. "Carregar sem compactacao" -> escolha ESTA pasta
 
 Atualizar depois de um novo build: clique no botao de recarregar da extensao em chrome://extensions.
-Projeto (codigo-fonte): ..\guitar-flash-autoplay
+Projeto (codigo-fonte): ..\guitar-flash-bot
 "@
 [System.IO.File]::WriteAllText((Join-Path $inst 'LEIA-ME - INSTALADOR.txt'), $note, (New-Object System.Text.UTF8Encoding($true)))
 "Instalador atualizado: $inst"

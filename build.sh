@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Linux/macOS equivalent of build.ps1. Builds the store packages from ./extension into ./dist
-#   guitar-flash-autoplay-chromium-<ver>.zip  -> Chrome Web Store, Edge Add-ons, Opera Add-ons (Brave uses the Chrome Web Store)
-#   guitar-flash-autoplay-firefox-<ver>.zip   -> addons.mozilla.org
-# and refreshes the installer folder ../guitar-flash-autoplay-INSTALADOR (Chrome/Edge/Brave "Load unpacked").
+#   guitar-flash-bot-chromium-<ver>.zip  -> Chrome Web Store, Edge Add-ons, Opera Add-ons (Brave uses the Chrome Web Store)
+#   guitar-flash-bot-firefox-<ver>.zip   -> addons.mozilla.org
+# and refreshes the installer folder ../guitar-flash-bot-INSTALADOR (Chrome/Edge/Brave "Load unpacked").
 # Requires: jq, zip.   Usage:  ./build.sh
 set -euo pipefail
 for c in jq zip; do command -v "$c" >/dev/null || { echo "faltando: $c" >&2; exit 1; }; done
@@ -20,8 +20,8 @@ pack() {
   mkdir -p "$stage"
   (cd "$src" && find . -type f ! -name manifest.json -print0 | xargs -0 cp --parents -t "$stage")
   jq "$filter" "$src/manifest.json" > "$stage/manifest.json"
-  rm -f "$dist/guitar-flash-autoplay-$name-$ver.zip"
-  (cd "$stage" && zip -qrX "$dist/guitar-flash-autoplay-$name-$ver.zip" .)
+  rm -f "$dist/guitar-flash-bot-$name-$ver.zip"
+  (cd "$stage" && zip -qrX "$dist/guitar-flash-bot-$name-$ver.zip" .)
 }
 
 # Chromium: service worker background, no Firefox-only keys
@@ -31,11 +31,11 @@ pack firefox '.background = {scripts: ["background.js"]}'
 ls -l "$dist"
 
 # Installer folder for Chrome/Edge/Brave, next to the project folder (regenerated on every build; do not edit it)
-inst="$(dirname "$root")/guitar-flash-autoplay-INSTALADOR"
+inst="$(dirname "$root")/guitar-flash-bot-INSTALADOR"
 rm -rf "$inst"; mkdir -p "$inst"
 cp -r "$tmp/chromium/." "$inst/"
 cat > "$inst/LEIA-ME - INSTALADOR.txt" <<EOF
-GUITAR FLASH AUTOPLAY - INSTALADOR (Chrome / Edge / Brave / Opera)
+GUITAR FLASH BOT - INSTALADOR (Chrome / Edge / Brave / Opera)
 Versao $ver - gerado automaticamente pelo build.sh do projeto. Nao edite os arquivos daqui.
 
 Instalar:
@@ -44,6 +44,6 @@ Instalar:
  3. "Carregar sem compactacao" -> escolha ESTA pasta
 
 Atualizar depois de um novo build: clique no botao de recarregar da extensao em chrome://extensions.
-Projeto (codigo-fonte): ../guitar-flash-autoplay
+Projeto (codigo-fonte): ../guitar-flash-bot
 EOF
 echo "Instalador atualizado: $inst"

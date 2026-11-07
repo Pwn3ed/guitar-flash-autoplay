@@ -1,4 +1,4 @@
-# Store listing texts — Guitar Flash Autoplay
+# Store listing texts — Guitar Flash Bot
 
 Use the same texts in every store (Chrome Web Store, Firefox Add-ons, Edge Add-ons, Opera Add-ons).
 Primary language: Portuguese (Brazil); English translation below.
@@ -7,13 +7,13 @@ Primary language: Portuguese (Brazil); English translation below.
 
 ## Português (Brasil)
 
-**Nome:** Guitar Flash Autoplay
+**Nome:** Guitar Flash Bot
 
 **Resumo (até 132 caracteres):**
 Joga Guitar Flash por você: acerta as notas, acordes e notas longas, sem apertos errados. Liga e desliga com um clique.
 
 **Descrição:**
-O Guitar Flash Autoplay toca as músicas do Guitar Flash (guitarflash.com) sozinho, nota por nota.
+O Guitar Flash Bot toca as músicas do Guitar Flash (guitarflash.com) sozinho, nota por nota.
 
 Como usar:
 1. Clique no ícone da extensão e aperte START.
@@ -37,13 +37,13 @@ Aviso: projeto independente, sem vínculo com o Guitar Flash. Use para diversão
 
 ## English
 
-**Name:** Guitar Flash Autoplay
+**Name:** Guitar Flash Bot
 
 **Summary (up to 132 characters):**
 Plays Guitar Flash for you: hits the notes, chords and sustains with no overstrums. Turn it on and off with one click.
 
 **Description:**
-Guitar Flash Autoplay plays Guitar Flash (guitarflash.com) songs by itself, note by note.
+Guitar Flash Bot plays Guitar Flash (guitarflash.com) songs by itself, note by note.
 
 How to use:
 1. Click the extension icon and press START.

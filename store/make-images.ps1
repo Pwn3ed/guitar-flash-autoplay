@@ -17,7 +17,7 @@ function DrawPopup($g, [float]$x, [float]$y, [string]$lang, [bool]$on) {
   $g.DrawPath((New-Object System.Drawing.Pen (C 70 70 80), 2), (RoundRect $x $y 330 250 16))
   $icon = [System.Drawing.Image]::FromFile((Join-Path (Split-Path $dir -Parent) 'extension\icons\icon48.png'))
   $g.DrawImage($icon, $x+20, $y+18, 36, 36); $icon.Dispose()
-  $g.DrawString('Guitar Flash Autoplay', (New-Object System.Drawing.Font 'Segoe UI', 17, ([System.Drawing.FontStyle]::Bold)), (New-Object System.Drawing.SolidBrush (C 242 242 242)), $x+64, $y+22)
+  $g.DrawString('Guitar Flash Bot', (New-Object System.Drawing.Font 'Segoe UI', 17, ([System.Drawing.FontStyle]::Bold)), (New-Object System.Drawing.SolidBrush (C 242 242 242)), $x+64, $y+22)
   $btnColor = if ($on) { C 192 57 43 } else { C 31 157 85 }
   $g.FillPath((New-Object System.Drawing.SolidBrush $btnColor), (RoundRect ($x+20) ($y+72) 290 58 12))
   $sf = New-Object System.Drawing.StringFormat; $sf.Alignment = 'Center'; $sf.LineAlignment = 'Center'
@@ -58,7 +58,7 @@ $bmp = New-Object System.Drawing.Bitmap 440, 280; $g = [System.Drawing.Graphics]
 $g.SmoothingMode = 'AntiAlias'; $g.TextRenderingHint = 'AntiAliasGridFit'
 $g.FillRectangle((New-Object System.Drawing.Drawing2D.LinearGradientBrush (New-Object System.Drawing.Point 0, 0), (New-Object System.Drawing.Point 440, 280), (C 30 26 44), (C 8 8 12)), 0, 0, 440, 280)
 $icon = [System.Drawing.Image]::FromFile((Join-Path $dir 'icon300.png')); $g.DrawImage($icon, 24, 60, 160, 160); $icon.Dispose()
-$g.DrawString("Guitar Flash`nAutoplay", (New-Object System.Drawing.Font 'Segoe UI', 24, ([System.Drawing.FontStyle]::Bold)), [System.Drawing.Brushes]::White, 198, 62)
+$g.DrawString("Guitar Flash`nBot", (New-Object System.Drawing.Font 'Segoe UI', 24, ([System.Drawing.FontStyle]::Bold)), [System.Drawing.Brushes]::White, 198, 62)
 $g.DrawString("Joga sozinho por você", (New-Object System.Drawing.Font 'Segoe UI', 14), (New-Object System.Drawing.SolidBrush (C 200 200 210)), 202, 152)
 $bmp.Save((Join-Path $out 'promo-440x280.png'), [System.Drawing.Imaging.ImageFormat]::Png); $g.Dispose(); $bmp.Dispose()
 

@@ -1,4 +1,4 @@
-// Guitar Flash Autoplay - runs inside the guitarflash.com page (MAIN world).
+// Guitar Flash Bot - runs inside the guitarflash.com page (MAIN world).
 // Controlled by the extension (bridge.js) through window.postMessage: {source:'gfbot-ext', cmd:'start'|'stop'}.
 //
 // How it works ("scene reader"):

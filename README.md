@@ -1,4 +1,4 @@
-# Guitar Flash Autoplay
+# Guitar Flash Bot
 
 > Desenvolvido por **pwn3ed** · Licença [MIT](LICENSE)
 
@@ -34,17 +34,17 @@ Funciona em Chrome, Edge, Brave, Opera e Firefox, em qualquer sistema (Windows, 
 | `build.ps1` / `build.sh` | Gera os pacotes das lojas em `dist/` e atualiza a pasta do instalador (Windows / Linux e macOS) |
 | `dist/` | Pacotes para as lojas: `...-chromium-<versão>.zip` (Chrome, Edge, Opera) e `...-firefox-<versão>.zip` |
 | `store/` | Material das lojas: textos (`LISTING.md`), privacidade (`PRIVACY.md`), guia de envio (`ENVIO.md`), imagens |
-| `../guitar-flash-autoplay-INSTALADOR/` | **Instalador** pronto para Chrome/Edge/Brave, gerado pelo `build.ps1` (não editar) |
+| `../guitar-flash-bot-INSTALADOR/` | **Instalador** pronto para Chrome/Edge/Brave, gerado pelo `build.ps1` (não editar) |
 
 ## Instalar (Chrome / Edge / Brave)
 1. Abra `chrome://extensions` e ligue o **Modo do desenvolvedor**.
-2. **Carregar sem compactação** → escolha a pasta `guitar-flash-autoplay-INSTALADOR`.
+2. **Carregar sem compactação** → escolha a pasta `guitar-flash-bot-INSTALADOR`.
 
 Sem build (ex. em outra máquina, só com `git clone`): dá para escolher direto a pasta `extension/` do repo;
 o Chrome aceita o mesmo `manifest.json` sem avisos.
 
 No Firefox: `about:debugging#/runtime/this-firefox` → **Carregar extensão temporária...** → escolha
-`dist/guitar-flash-autoplay-firefox-<versão>.zip` (fica até fechar o Firefox; permanente só depois de assinada pela Mozilla).
+`dist/guitar-flash-bot-firefox-<versão>.zip` (fica até fechar o Firefox; permanente só depois de assinada pela Mozilla).
 
 ## Usar
 1. Clique no ícone → **START** (o ícone mostra "ON").

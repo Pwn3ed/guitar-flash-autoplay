@@ -1,5 +1,5 @@
 {
-  "appName": { "message": "Guitar Flash Autoplay" },
+  "appName": { "message": "Guitar Flash Bot" },
   "appDesc": { "message": "Joga Guitar Flash (guitarflash.com) por você, acertando as notas, e guarda o histórico das músicas. Desenvolvido por pwn3ed." },
   "start": { "message": "START" },
   "stop": { "message": "STOP" },

@@ -88,9 +88,9 @@ const FIELDS = ['startedAt', 'endedAt', 'title', 'artist', 'difficulty', 'mode',
 $('csv').addEventListener('click', () => {
   const esc = (v) => { const s = v == null ? '' : String(v); return /[",\n;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
   const csv = [FIELDS.join(','), ...all.map((e) => FIELDS.map((f) => esc(e[f])).join(','))].join('\n');
-  download('guitar-flash-autoplay-history.csv', 'text/csv', '﻿' + csv);
+  download('guitar-flash-bot-history.csv', 'text/csv', '﻿' + csv);
 });
-$('json').addEventListener('click', () => download('guitar-flash-autoplay-history.json', 'application/json', JSON.stringify(all, null, 2)));
+$('json').addEventListener('click', () => download('guitar-flash-bot-history.json', 'application/json', JSON.stringify(all, null, 2)));
 $('clear').addEventListener('click', () => { if (all.length && confirm(t('historyClearConfirm'))) chrome.storage.local.set({ history: [] }); });
 $('filter').addEventListener('input', render);
 
