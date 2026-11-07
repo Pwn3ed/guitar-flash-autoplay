@@ -22,7 +22,7 @@ Funciona em Chrome, Edge, Brave, Opera e Firefox, em qualquer sistema (Windows, 
 | Pasta / arquivo | O que é |
 |---|---|
 | `extension/` | **Código-fonte** da extensão (é aqui que se edita) |
-| `build.ps1` | Gera os pacotes das lojas em `dist/` e atualiza a pasta do instalador |
+| `build.ps1` / `build.sh` | Gera os pacotes das lojas em `dist/` e atualiza a pasta do instalador (Windows / Linux e macOS) |
 | `dist/` | Pacotes para as lojas: `...-chromium-<versão>.zip` (Chrome, Edge, Opera) e `...-firefox-<versão>.zip` |
 | `store/` | Material das lojas: textos (`LISTING.md`), privacidade (`PRIVACY.md`), guia de envio (`ENVIO.md`), imagens |
 | `../guitar-flash-autoplay-INSTALADOR/` | **Instalador** pronto para Chrome/Edge/Brave, gerado pelo `build.ps1` (não editar) |
@@ -48,6 +48,10 @@ Se você estiver logado no site, as pontuações vão para o ranking.
 ## Depois de mudar o código
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\build.ps1
+```
+No Linux/macOS (precisa de `jq` e `zip`), o equivalente é:
+```bash
+./build.sh
 ```
 Depois clique no botão de recarregar (↻) da extensão em `chrome://extensions`.
 Para publicar uma atualização, aumente `version` em `extension/manifest.json` antes do build.
