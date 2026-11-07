@@ -31,6 +31,9 @@ Funciona em Chrome, Edge, Brave, Opera e Firefox, em qualquer sistema (Windows, 
 1. Abra `chrome://extensions` e ligue o **Modo do desenvolvedor**.
 2. **Carregar sem compactação** → escolha a pasta `guitar-flash-autoplay-INSTALADOR`.
 
+Sem build (ex. em outra máquina, só com `git clone`): dá para escolher direto a pasta `extension/` do repo;
+o Chrome aceita o mesmo `manifest.json` sem avisos.
+
 No Firefox: `about:debugging#/runtime/this-firefox` → **Carregar extensão temporária...** → escolha
 `dist/guitar-flash-autoplay-firefox-<versão>.zip` (fica até fechar o Firefox; permanente só depois de assinada pela Mozilla).
 
