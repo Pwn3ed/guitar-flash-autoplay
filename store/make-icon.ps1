@@ -1,4 +1,4 @@
-# Draws the extension icon (original design: electric guitar + "play" badge) at 512 px and exports all sizes.
+# Draws the extension icon (original design: an electric guitar on a transparent background) at 512 px and exports all sizes.
 #   extension/icons/icon16|32|48|128.png  and  store/icon300.png
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
@@ -13,27 +13,21 @@ $bmp = New-Object System.Drawing.Bitmap $S, $S
 $g = [System.Drawing.Graphics]::FromImage($bmp)
 $g.SmoothingMode = 'AntiAlias'; $g.InterpolationMode = 'HighQualityBicubic'; $g.Clear([System.Drawing.Color]::Transparent)
 
-# rounded dark background with a warm stage glow
-$r = 110; $bg = New-Object System.Drawing.Drawing2D.GraphicsPath
-$bg.AddArc(0, 0, 2*$r, 2*$r, 180, 90); $bg.AddArc($S-2*$r-1, 0, 2*$r, 2*$r, 270, 90)
-$bg.AddArc($S-2*$r-1, $S-2*$r-1, 2*$r, 2*$r, 0, 90); $bg.AddArc(0, $S-2*$r-1, 2*$r, 2*$r, 90, 90); $bg.CloseFigure()
-$g.FillPath((New-Object System.Drawing.Drawing2D.LinearGradientBrush (P 0 0), (P 0 $S), (C 38 30 46), (C 12 10 16)), $bg)
-$g.SetClip($bg)
-$glow = New-Object System.Drawing.Drawing2D.GraphicsPath; $glow.AddEllipse(-60, 180, 520, 420)
-$pb = New-Object System.Drawing.Drawing2D.PathGradientBrush $glow; $pb.CenterColor = (C 255 120 30 120); $pb.SurroundColors = @((C 255 120 30 0))
-$g.FillPath($pb, $glow); $g.ResetClip()
-
-# the guitar is drawn upright around (256,256), then rotated 45 degrees
+# transparent background: only the guitar. It is drawn upright around (256,247), then rotated and scaled to fill
+# the canvas. Light outlines keep it visible on both light and dark browser toolbars.
 $state = $g.Save()
-$g.TranslateTransform(262, 262); $g.RotateTransform(40); $g.TranslateTransform(-256, -256)
+$g.TranslateTransform(256, 256); $g.RotateTransform(40); $g.ScaleTransform(0.95, 0.95); $g.TranslateTransform(-256, -247)
 
 # neck + headstock
-$g.FillRectangle((New-Object System.Drawing.SolidBrush (C 92 58 34)), 238, 40, 36, 250)
-$fret = New-Object System.Drawing.Pen (C 210 200 190), 3
+$edge = New-Object System.Drawing.Pen (C 255 255 255 210), 6
+$g.DrawRectangle($edge, 238, 40, 36, 250)
+$g.FillRectangle((New-Object System.Drawing.SolidBrush (C 120 74 40)), 238, 40, 36, 250)
+$fret = New-Object System.Drawing.Pen (C 230 220 205), 3
 for ($y = 70; $y -le 270; $y += 26) { $g.DrawLine($fret, 238, $y, 274, $y) }
 $head = New-Object System.Drawing.Drawing2D.GraphicsPath
 $head.AddPolygon(@((P 230 50), (P 282 50), (P 292 -6), (P 222 -6)))
-$g.FillPath((New-Object System.Drawing.SolidBrush (C 30 30 36)), $head)
+$g.DrawPath($edge, $head)
+$g.FillPath((New-Object System.Drawing.SolidBrush (C 200 30 45)), $head)
 $peg = New-Object System.Drawing.SolidBrush (C 220 220 228)
 foreach ($py in 2, 20, 38) { $g.FillEllipse($peg, 208, $py, 14, 10); $g.FillEllipse($peg, 290, $py, 14, 10) }
 
@@ -55,11 +49,6 @@ $g.FillRectangle($pk, 226, 312, 60, 18); $g.FillRectangle($pk, 226, 360, 60, 18)
 $str = New-Object System.Drawing.Pen (C 235 235 240 220), 2
 foreach ($x in 244, 252, 260, 268) { $g.DrawLine($str, $x, 0, $x, 426) }
 $g.Restore($state)
-
-# "auto play" badge (bottom right)
-$g.FillEllipse((New-Object System.Drawing.SolidBrush (C 20 20 26)), 330, 330, 160, 160)
-$g.FillEllipse((New-Object System.Drawing.Drawing2D.LinearGradientBrush (P 340 340), (P 480 480), (C 60 220 120), (C 20 150 80)), 342, 342, 136, 136)
-$g.FillPolygon([System.Drawing.Brushes]::White, @((P 393 372), (P 393 448), (P 452 410)))
 
 $g.Dispose()
 function Save([int]$size, [string]$path) {
