@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "__MSG_appName__",
+  "short_name": "Guitar Flash Autoplay",
+  "version": "1.1.0",
+  "description": "__MSG_appDesc__",
+  "author": "pwn3ed",
+  "default_locale": "en",
+  "icons": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "permissions": ["storage"],
+  "host_permissions": ["https://guitarflash.com/*", "https://www.guitarflash.com/*"],
+  "background": {
+    "service_worker": "background.js",
+    "scripts": ["background.js"]
+  },
+  "action": {
+    "default_title": "__MSG_appName__",
+    "default_popup": "popup.html",
+    "default_icon": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png" }
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://guitarflash.com/*", "https://www.guitarflash.com/*"],
+      "js": ["gfbot.js"],
+      "world": "MAIN",
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": ["https://guitarflash.com/*", "https://www.guitarflash.com/*"],
+      "js": ["bridge.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "gf-autoplay@guitarflash-bot",
+      "strict_min_version": "128.0",
+      "data_collection_permissions": { "required": ["none"] }
+    }
+  }
+}
