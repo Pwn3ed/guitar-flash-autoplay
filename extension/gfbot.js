@@ -460,10 +460,26 @@
     return out;
   }
   G.songInfo = songInfo;
+  // Brave's fingerprinting protection (Shields, on by default) slightly changes what a page reads back from canvas and
+  // audio. The game now uses those reads before it unlocks a song's notes, so with the protection on every song ends at
+  // once with 0 notes ("You Rock", 0/0). The bot cannot change Shields; it detects the case so the popup can explain
+  // how to turn it off for guitarflash.com. Test: paint a solid colour and read it back - unchanged without the protection.
+  function fingerprintBlocked() {
+    try {
+      if (!navigator.brave) return false;
+      const c = document.createElement('canvas'); c.width = 64; c.height = 16;
+      const x = c.getContext('2d'); x.fillStyle = 'rgb(10,200,30)'; x.fillRect(0, 0, 64, 16);
+      const d = x.getImageData(0, 0, 64, 16).data;
+      for (let i = 0; i < d.length; i += 4) if (d[i] !== 10 || d[i + 1] !== 200 || d[i + 2] !== 30) return true;
+    } catch (e) { }
+    return false;
+  }
+  const FP_BLOCKED = fingerprintBlocked();
+  G.fpBlocked = FP_BLOCKED;
   function postStatus() {
     const b = G.bot, S = b ? b.songTime() : 0, info = b ? songInfo() : {};
     window.postMessage({ source: 'gfbot-page', type: 'status', status: {
-      running: G.running, attached: !!b, presses: b ? b.songPresses : 0,
+      running: G.running, attached: !!b, fpBlocked: FP_BLOCKED, presses: b ? b.songPresses : 0,
       song: info.title ? info.title + (info.artist ? ' - ' + info.artist : '') : '', difficulty: info.difficulty || '',
       paused: !!(b && b.paused && S > 1),
       songTime: b && S > 0 ? Math.floor(S / 60) + ':' + String(Math.floor(S % 60)).padStart(2, '0') : '' } }, location.origin);

@@ -42,5 +42,7 @@
   "colTime": { "message": "Tempo" },
   "colPauses": { "message": "Pausas" },
   "resultCompleted": { "message": "Concluída" },
-  "resultIncomplete": { "message": "Interrompida" }
+  "resultIncomplete": { "message": "Interrompida" },
+  "braveFpTitle": { "message": "O Brave está bloqueando as notas do jogo." },
+  "braveFpFix": { "message": "Com a proteção contra fingerprinting do Brave ligada, o guitarflash.com não consegue carregar as notas e toda música termina na hora, sem nada para tocar (mesmo sem o bot). Para corrigir: no guitarflash.com, clique no leão (Shields) na barra de endereço, abra os controles avançados, desative o bloqueio de fingerprinting só para este site e recarregue a página." }
 }

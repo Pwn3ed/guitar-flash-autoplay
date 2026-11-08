@@ -1,6 +1,7 @@
 const t = (k, subs) => chrome.i18n.getMessage(k, subs) || k;
 const btn = document.getElementById('toggle');
 const st = document.getElementById('status');
+const warn = document.getElementById('warn');
 document.getElementById('title').textContent = t('appName');
 document.getElementById('hint').textContent = t('hint');
 document.getElementById('rank').textContent = t('rankNote');
@@ -13,6 +14,9 @@ let enabled = false;
 function line(label, value) { const d = document.createElement('div'); d.textContent = label + ': '; const b = document.createElement('b'); b.textContent = value; d.appendChild(b); return d; }
 
 function render(status) {
+  // Brave fingerprinting protection on: the game cannot load the notes (see gfbot.js fingerprintBlocked)
+  warn.hidden = !(status && status.fpBlocked);
+  if (!warn.hidden) { warn.replaceChildren(Object.assign(document.createElement('b'), { textContent: t('braveFpTitle') }), document.createElement('br'), t('braveFpFix')); }
   btn.textContent = enabled ? t('stop') : t('start');
   btn.className = enabled ? 'stop' : 'start';
   st.replaceChildren();

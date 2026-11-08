@@ -29,6 +29,8 @@ Destaques:
 
 Como funciona: a extensão observa a pista do jogo na própria página e aperta as teclas no momento certo, sincronizada com o tempo da música.
 
+No Brave: desative o bloqueio de fingerprinting dos Shields para o guitarflash.com (leão na barra de endereço → controles avançados). Com ele ligado, o próprio site não carrega as notas e as músicas terminam na hora, com ou sem o bot; a extensão avisa no popup quando isso acontece.
+
 Aviso: projeto independente, sem vínculo com o Guitar Flash. Use para diversão; por favor, não envie pontuações do bot para o ranking do site.
 
 **Categoria:** Diversão / Entretenimento (Chrome: "Entertainment"; Firefox: "Games & Entertainment")
@@ -58,6 +60,8 @@ Highlights:
 • Lightweight: runs only on guitarflash.com and collects no data.
 
 How it works: the extension watches the game's note highway on the page itself and presses the keys at the right moment, synchronized with the song's clock.
+
+On Brave: turn off Shields' fingerprinting blocking for guitarflash.com (lion in the address bar → advanced controls). With it on, the site itself cannot load the notes and songs end right away, with or without the bot; the extension shows a warning in its popup when this happens.
 
 Disclaimer: independent project, not affiliated with Guitar Flash. Use it for fun; please don't submit bot scores to the site's rankings.
 

@@ -58,6 +58,12 @@ Observações: a aba do jogo e a **janela do navegador** precisam ficar visívei
 coberta por outra, o navegador reduz a página a ~2 quadros por segundo e o bot não consegue jogar.
 Se você estiver logado no site, as pontuações vão para o ranking.
 
+**Brave:** com a proteção contra fingerprinting dos Shields ligada (padrão do Brave), o guitarflash.com não consegue
+carregar as notas e toda música termina na hora com 0 notas ("You Rock", Special 0/0), **mesmo sem a extensão**:
+o jogo lê canvas/áudio antes de liberar as notas e o Brave altera essas leituras. Correção: no guitarflash.com, leão (Shields)
+→ controles avançados → desativar o bloqueio de fingerprinting só para o site, e recarregar. O popup avisa quando detecta isso
+(`fingerprintBlocked()` no `gfbot.js`).
+
 ## Depois de mudar o código
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\build.ps1
