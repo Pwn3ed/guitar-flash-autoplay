@@ -1,4 +1,4 @@
-# Guitar Flash Autoplay
+# Guitar Flash Bot
 
 > Desenvolvido por **pwn3ed** · Licença [MIT](LICENSE)
 
@@ -39,17 +39,20 @@ Funciona em Chrome, Edge, Brave, Opera e Firefox, em qualquer sistema (Windows, 
 | Pasta / arquivo | O que é |
 |---|---|
 | `extension/` | **Código-fonte** da extensão (é aqui que se edita) |
-| `build.ps1` | Gera os pacotes das lojas em `dist/` e atualiza a pasta do instalador |
+| `build.ps1` / `build.sh` | Gera os pacotes das lojas em `dist/` e atualiza a pasta do instalador (Windows / Linux e macOS) |
 | `dist/` | Pacotes para as lojas: `...-chromium-<versão>.zip` (Chrome, Edge, Opera) e `...-firefox-<versão>.zip` |
 | `store/` | Material das lojas: textos (`LISTING.md`), privacidade (`PRIVACY.md`), guia de envio (`ENVIO.md`), imagens |
-| `../guitar-flash-autoplay-INSTALADOR/` | **Instalador** pronto para Chrome/Edge/Brave, gerado pelo `build.ps1` (não editar) |
+| `../guitar-flash-bot-INSTALADOR/` | **Instalador** pronto para Chrome/Edge/Brave, gerado pelo `build.ps1` (não editar) |
 
 ## Instalar (Chrome / Edge / Brave)
 1. Abra `chrome://extensions` e ligue o **Modo do desenvolvedor**.
-2. **Carregar sem compactação** → escolha a pasta `guitar-flash-autoplay-INSTALADOR`.
+2. **Carregar sem compactação** → escolha a pasta `guitar-flash-bot-INSTALADOR`.
+
+Sem build (ex. em outra máquina, só com `git clone`): dá para escolher direto a pasta `extension/` do repo;
+o Chrome aceita o mesmo `manifest.json` sem avisos.
 
 No Firefox: `about:debugging#/runtime/this-firefox` → **Carregar extensão temporária...** → escolha
-`dist/guitar-flash-autoplay-firefox-<versão>.zip` (fica até fechar o Firefox; permanente só depois de assinada pela Mozilla).
+`dist/guitar-flash-bot-firefox-<versão>.zip` (fica até fechar o Firefox; permanente só depois de assinada pela Mozilla).
 
 ## Usar
 1. Clique no ícone → **START** (o ícone mostra "ON").
@@ -63,9 +66,19 @@ Observações: a aba do jogo e a **janela do navegador** precisam ficar visívei
 coberta por outra, o navegador reduz a página a ~2 quadros por segundo e o bot não consegue jogar.
 Se você estiver logado no site, as pontuações vão para o ranking.
 
+**Brave:** com a proteção contra fingerprinting dos Shields ligada (padrão do Brave), o guitarflash.com não consegue
+carregar as notas e toda música termina na hora com 0 notas ("You Rock", Special 0/0), **mesmo sem a extensão**:
+o jogo lê canvas/áudio antes de liberar as notas e o Brave altera essas leituras. Correção: no guitarflash.com, leão (Shields)
+→ controles avançados → desativar o bloqueio de fingerprinting só para o site, e recarregar. O popup avisa quando detecta isso
+(`fingerprintBlocked()` no `gfbot.js`).
+
 ## Depois de mudar o código
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\build.ps1
+```
+No Linux/macOS (precisa de `jq` e `zip`), o equivalente é:
+```bash
+./build.sh
 ```
 Depois clique no botão de recarregar (↻) da extensão em `chrome://extensions`.
 Para publicar uma atualização, aumente `version` em `extension/manifest.json` antes do build.

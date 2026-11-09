@@ -1,5 +1,5 @@
 {
-  "appName": { "message": "Guitar Flash Autoplay" },
+  "appName": { "message": "Guitar Flash Bot" },
   "appDesc": { "message": "Plays Guitar Flash (guitarflash.com) for you, hitting the notes, and keeps a history of every song. Developed by pwn3ed." },
   "start": { "message": "START" },
   "stop": { "message": "STOP" },
@@ -42,5 +42,7 @@
   "colTime": { "message": "Time" },
   "colPauses": { "message": "Pauses" },
   "resultCompleted": { "message": "Completed" },
-  "resultIncomplete": { "message": "Interrupted" }
+  "resultIncomplete": { "message": "Interrupted" },
+  "braveFpTitle": { "message": "Brave is blocking the game’s notes." },
+  "braveFpFix": { "message": "With Brave’s fingerprinting protection on, guitarflash.com cannot load the notes and every song ends right away with nothing to play (even without the bot). To fix it: on guitarflash.com, click the lion (Shields) in the address bar, open the advanced controls, turn off fingerprinting blocking for this site only and reload the page." }
 }

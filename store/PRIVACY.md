@@ -1,8 +1,8 @@
-# Política de privacidade — Guitar Flash Autoplay
+# Política de privacidade — Guitar Flash Bot
 
 **Última atualização:** 6 de novembro de 2026
 
-O Guitar Flash Autoplay não coleta, armazena, vende nem transmite dados pessoais ou de uso.
+O Guitar Flash Bot não coleta, armazena, vende nem transmite dados pessoais ou de uso.
 
 - A extensão roda apenas nas páginas de https://guitarflash.com.
 - Ela lê a imagem do jogo na própria página, localmente, só para saber quando apertar as teclas. Nada sai do seu computador.
@@ -13,11 +13,11 @@ Dúvidas: entre em contato pelo e-mail informado na página da extensão na loja
 
 ---
 
-# Privacy policy — Guitar Flash Autoplay
+# Privacy policy — Guitar Flash Bot
 
 **Last updated:** November 6, 2026
 
-Guitar Flash Autoplay does not collect, store, sell or transmit any personal or usage data.
+Guitar Flash Bot does not collect, store, sell or transmit any personal or usage data.
 
 - The extension runs only on https://guitarflash.com pages.
 - It reads the game's image on the page itself, locally, only to know when to press the keys. Nothing leaves your computer.
