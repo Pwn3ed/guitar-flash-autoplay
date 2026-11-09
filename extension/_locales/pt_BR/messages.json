@@ -43,5 +43,8 @@
   "colPauses": { "message": "Pausas" },
   "resultCompleted": { "message": "Concluída" },
   "resultIncomplete": { "message": "Interrompida" },
-  "braveFpFix": { "message": "Se não funcionar no Brave: clique no leão da barra de endereço e desative o bloqueio de fingerprinting." }
+  "braveFpFix": { "message": "Se não funcionar no Brave: clique no leão da barra de endereço e desative o bloqueio de fingerprinting." },
+  "statsToggle": { "message": "Enviar estatísticas anônimas" },
+  "statsText": { "message": "Para eu saber se o bot está jogando bem e em quais músicas ele erra, a extensão manda o resultado de cada partida (música, dificuldade, pontuação, acertos e erros) para um servidor meu. Não vai seu nome, login, e-mail nem nada do seu navegador, e o servidor não guarda seu IP. Isso me ajuda a melhorar o bot. Você pode desligar aqui quando quiser." },
+  "statsOk": { "message": "Entendi" }
 }

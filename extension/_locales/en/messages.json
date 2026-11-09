@@ -43,5 +43,8 @@
   "colPauses": { "message": "Pauses" },
   "resultCompleted": { "message": "Completed" },
   "resultIncomplete": { "message": "Interrupted" },
-  "braveFpFix": { "message": "If it doesn’t work on Brave: click the lion in the address bar and turn off fingerprinting blocking." }
+  "braveFpFix": { "message": "If it doesn’t work on Brave: click the lion in the address bar and turn off fingerprinting blocking." },
+  "statsToggle": { "message": "Send anonymous statistics" },
+  "statsText": { "message": "So I can tell whether the bot plays well and which songs it misses, the extension sends each play’s result (song, difficulty, score, hits and misses) to my server. Your name, login, e-mail and anything about your browser are never sent, and the server does not keep your IP. This helps me improve the bot. You can turn it off here at any time." },
+  "statsOk": { "message": "Got it" }
 }

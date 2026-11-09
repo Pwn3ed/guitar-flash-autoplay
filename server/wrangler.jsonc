@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "gfb",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": true,
+  "preview_urls": false,
+  // a política de privacidade (../store/PRIVACY.md) entra no Worker como texto
+  "rules": [{ "type": "Text", "globs": ["**/*.md"], "fallthrough": true }],
+  "d1_databases": [
+    { "binding": "DB", "database_name": "gfb", "database_id": "fe2e0571-37a8-4bcf-ac3f-8c1927dcee0a", "migrations_dir": "migrations" }
+  ],
+  "r2_buckets": [{ "binding": "BACKUP", "bucket_name": "gfb-backup" }],
+  // cópia semanal de todas as partidas para o R2 (segunda, 06:00 UTC)
+  "triggers": { "crons": ["0 6 * * 1"] },
+  // limite por IP (o IP só é usado na hora, nunca gravado)
+  "ratelimits": [{ "name": "LIMITE", "namespace_id": "1001", "simple": { "limit": 60, "period": 60 } }],
+  // sem logs: nada de IP ou requisição fica guardado
+  "observability": { "enabled": false }
+  // segredo: PAINEL_SENHA (wrangler secret put PAINEL_SENHA)
+}
