@@ -24,7 +24,15 @@ Funciona em Chrome, Edge, Brave, Opera e Firefox, em qualquer sistema (Windows, 
   cada nota vem da posição dela na pista, não da cor.
 - **Pausa (tecla P):** na volta da pausa o relógio do jogo pula ~60-70 ms. Para nenhuma nota ser perdida nesse salto,
   o bot segura a tecla P até uma brecha nas notas (normalmente uma fração de segundo, no máximo 5 s) e só então pausa
-  o jogo. Na volta ele reencontra as notas pelo deslocamento da pista e recalcula os horários com o relógio novo.
+  o jogo. Em trechos muito rápidos, sem brecha, depois de 1 s ele aceita uma brecha menor e nunca pausa logo depois de
+  apertar uma nota. Na volta ele reencontra as notas pelo deslocamento da pista e recalcula os horários com o relógio
+  novo; uma nota apertada logo antes da pausa que ainda esteja no traste é apertada de novo.
+
+## Limitações conhecidas
+- **Black Widow Of La Porte (John 5), Expert, pausando muitas vezes:** com pausas a cada 5-9 s, o bot perdeu 4 notas
+  (por volta de 3:54, 4:15, 4:18 e 4:57). A causa ainda não foi encontrada. Sem pausar, ou pausando de vez em quando,
+  a música sai 100%.
+- Pausas no meio de trechos muito rápidos são o único caso em que o bot ainda pode perder uma nota.
 
 ## Pastas
 

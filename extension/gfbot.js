@@ -33,7 +33,10 @@
     reacqMaxI: 39.4,                  // ... except in the first frame after a pause: up to the frets (a note can be right
                                       //     there when the game pauses; keys are released, so no press sprites)
     pauseGap: 0.065,                  // the pause key waits until no note is due within this time (s)...
-    pauseMax: 5,                      // ... but never longer than this (s)
+    pauseGap2: 0.045,                 // ... or, after pauseRelax s without such a gap (dense runs), within this time...
+    pauseRelax: 1,
+    pauseMax: 5,                      // ... but never longer than this (s); even then never right after a press
+    pauseSwallow: 0.03,               // a press this close before the pause may be swallowed by it
     voteDecay: 0.7,                   // weight kept by a note's older tick votes at each new sighting
     KEYS: [['a', 'KeyA', 65], ['s', 'KeyS', 83], ['j', 'KeyJ', 74], ['k', 'KeyK', 75], ['l', 'KeyL', 76]],
   };
@@ -41,7 +44,7 @@
   const yTop = Q0 - Q1 * Q1 / (4 * Q2);                         // lowest y the lattice formula can invert
   const indexOf = (y) => (y <= yTop ? NaN : (-Q1 + Math.sqrt(Q1 * Q1 + 4 * Q2 * (y - Q0))) / (2 * Q2));
 
-  const G = window.GFBOT = { __v: 10, cfg: CFG, bot: null, running: false, debug: false, atlas: null };
+  const G = window.GFBOT = { __v: 11, cfg: CFG, bot: null, running: false, debug: false, atlas: null };
 
   // ---- atlas: texture regions of the note sprites, from the game's own image2.json ----
   let atlasLoading = null;
@@ -125,7 +128,7 @@
       if (n.fired || !G.running) return;
       n.fired = 1;
       if (bot.down[i]) send(i, 'keyup');
-      send(i, 'keydown'); bot.down[i] = 1; bot.cur[i] = n; bot.presses++; bot.songPresses++; bot.lastFire = clk();
+      send(i, 'keydown'); bot.down[i] = 1; bot.cur[i] = n; bot.presses++; bot.songPresses++; bot.lastFire = n.ft = clk();
       if (bot.session) bot.session.presses++;
       if (G.debug && bot.fired.length < 5000) bot.fired.push({ t: performance.now(), S: clk(), i, nt: n.nt, sus: n.sus, rel: n.rel });
       planRelease(i, n);
@@ -276,6 +279,7 @@
           const pv = L[L.indexOf(n) - 1]; if (pv && pv.fired && !pv.done) planRelease(p.lane, pv);
         }
       }
+      if (bot.reacq) for (const L of bot.notes) for (const n of L) if (n.unsure) { n.unsure = 0; if (n.seen !== fid) { n.fired = 1; n.done = 1; } }
       bot.reacq = false;
       for (const tr of frameTrails) {
         const L = bot.notes[tr.lane];
@@ -296,10 +300,16 @@
 
     // ---- pause / buffering ----
     function pause() {
+      const now = clk();
       C.v = -1;
       for (let i = 0; i < 5; i++) {
         if (bot.down[i]) { send(i, 'keyup'); bot.down[i] = 0; }
-        bot.notes[i].forEach((n) => { cancel(n.tp); cancel(n.tr); });
+        bot.notes[i].forEach((n) => {
+          cancel(n.tp); cancel(n.tr);
+          // the game reads keys once per frame: a press right before the pause can be lost. Such a note is played
+          // again after the pause if it is still on the highway (a note that was hit is no longer drawn).
+          if (n.fired && n.ft > now - CFG.pauseSwallow) { n.fired = 0; n.unsure = 1; }
+        });
       }
     }
     // Resume (or the clock jumped back): after the pause countdown the game re-syncs its own clock, which can move it by
@@ -319,9 +329,10 @@
     // When the player pauses, the game's clock comes back ~60-70 ms further on after the countdown, so a note that was
     // that close to the frets is counted as missed at once; and a key pressed right before the pause is swallowed (the
     // game reads keys once per frame). So the pause key is held back until there is a gap: the last press is at least
-    // a frame old and no note is due in the next ~65 ms (at most CFG.pauseMax s, then the key goes through anyway).
+    // a frame old and no note is due in the next ~65 ms. Dense runs may never have such a gap: after CFG.pauseRelax s
+    // ~45 ms is enough, and after CFG.pauseMax s any moment that is not right after a press.
     let held = null;
-    const gap = () => { const now = clk(); if (now - bot.lastFire < 0.025) return false; for (const L of bot.notes) for (const n of L) if (!n.fired && n.nt > now - 0.03 && n.nt < now + CFG.pauseGap) return false; return true; };
+    const gap = (win = CFG.pauseGap) => { const now = clk(); if (now - bot.lastFire < 0.025) return false; for (const L of bot.notes) for (const n of L) if (!n.fired && n.nt > now - 0.03 && n.nt < now + win) return false; return true; };
     const onKey = (e) => {
       if (e.__gfbot || !/^(p|P|Escape)$/.test(e.key)) return;
       if (held) { held.push(e); e.stopImmediatePropagation(); e.preventDefault(); return; }
@@ -329,7 +340,9 @@
       held = [e]; e.stopImmediatePropagation(); e.preventDefault();
       const t0 = performance.now();
       const check = () => {
-        if (!gap() && performance.now() - t0 < CFG.pauseMax * 1000) { setTimeout(check, 4); return; }
+        const el = (performance.now() - t0) / 1000;
+        const ok = gap() || (el > CFG.pauseRelax && gap(CFG.pauseGap2)) || (el > CFG.pauseMax && gap(0)) || el > CFG.pauseMax + 2;
+        if (!ok) { setTimeout(check, 4); return; }
         const evs = held; held = null;
         if (G.debug) bot.holds.push([+clk().toFixed(3), Math.round(performance.now() - t0), gap() ? 1 : 0]);
         for (const o of evs) { const c = new w.KeyboardEvent(o.type, o); c.__gfbot = true; o.target.dispatchEvent(c); }
