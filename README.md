@@ -2,7 +2,7 @@
 
 > Desenvolvido por **pwn3ed** · Licença [MIT](LICENSE)
 
-Extensão de navegador que joga Guitar Flash (guitarflash.com) sozinha: acha as notas na tela, aperta as
+Extensão de navegador que joga Guitar Flash sozinha: acha as notas na tela, aperta as
 teclas no momento certo (sincronizado com o relógio do vídeo do YouTube) e segura as notas longas.
 Guarda um histórico de todas as músicas tocadas (acertos, erros, overstrums, combo, pontuação).
 Funciona em Chrome, Edge, Brave, Opera e Firefox, em qualquer sistema (Windows, Linux, macOS).
@@ -56,7 +56,7 @@ No Firefox: `about:debugging#/runtime/this-firefox` → **Carregar extensão tem
 
 ## Usar
 1. Clique no ícone → **START** (o ícone mostra "ON").
-2. Abra uma música no guitarflash.com e aperte uma tecla (Enter) para começar. O bot segue quando você troca de música.
+2. Abra uma música no Guitar Flash e aperte uma tecla (Enter) para começar. O bot segue quando você troca de música.
    Comece com o teclado, não com clique do mouse: o jogo pode contar o clique como um overstrum antes da primeira nota.
 3. **STOP** para parar. Fechar o navegador também para, e ele sempre abre desligado.
 
@@ -66,10 +66,8 @@ Observações: a aba do jogo e a **janela do navegador** precisam ficar visívei
 coberta por outra, o navegador reduz a página a ~2 quadros por segundo e o bot não consegue jogar.
 Se você estiver logado no site, as pontuações vão para o ranking.
 
-**Brave:** com a proteção contra fingerprinting dos Shields ligada (padrão do Brave), o guitarflash.com não consegue
-carregar as notas e toda música termina na hora com 0 notas ("You Rock", Special 0/0), **mesmo sem a extensão**:
-o jogo lê canvas/áudio antes de liberar as notas e o Brave altera essas leituras. Correção: no guitarflash.com, leão (Shields)
-→ controles avançados → desativar o bloqueio de fingerprinting só para o site, e recarregar. O popup avisa quando detecta isso
+**Brave:** se as músicas terminarem na hora, sem notas, clique no leão da barra de endereço e desative o bloqueio de
+fingerprinting (o jogo não carrega as notas com ele ligado, mesmo sem o bot). O popup lembra disso no Brave
 (`fingerprintBlocked()` no `gfbot.js`).
 
 ## Depois de mudar o código

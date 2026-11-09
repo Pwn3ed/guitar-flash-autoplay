@@ -1,10 +1,10 @@
 {
   "appName": { "message": "Guitar Flash Bot" },
-  "appDesc": { "message": "Joga Guitar Flash (guitarflash.com) por você, acertando as notas, e guarda o histórico das músicas. Desenvolvido por pwn3ed." },
+  "appDesc": { "message": "Joga Guitar Flash por você, acertando as notas, e guarda o histórico das músicas. Desenvolvido por pwn3ed." },
   "start": { "message": "START" },
   "stop": { "message": "STOP" },
   "off": { "message": "Desligado." },
-  "onOpenSite": { "message": "Ligado. Abra o guitarflash.com e escolha uma música." },
+  "onOpenSite": { "message": "Ligado. Abra o Guitar Flash e escolha uma música." },
   "onWaiting": { "message": "Ligado. Aguardando uma música abrir..." },
   "playing": { "message": "Jogando" },
   "paused": { "message": "Pausado" },
@@ -12,7 +12,7 @@
   "difficulty": { "message": "Dificuldade" },
   "notes": { "message": "Notas tocadas" },
   "time": { "message": "Tempo" },
-  "hint": { "message": "Com o bot ligado, abra uma música no guitarflash.com e aperte qualquer tecla para começar. Deixe a janela do navegador visível." },
+  "hint": { "message": "Com o bot ligado, abra uma música no Guitar Flash e aperte qualquer tecla para começar. Deixe a janela do navegador visível." },
   "rankNote": { "message": "Por favor, não envie pontuações do bot para o ranking." },
   "developedBy": { "message": "Desenvolvido por" },
   "historyButton": { "message": "Histórico de músicas" },
@@ -43,6 +43,5 @@
   "colPauses": { "message": "Pausas" },
   "resultCompleted": { "message": "Concluída" },
   "resultIncomplete": { "message": "Interrompida" },
-  "braveFpTitle": { "message": "O Brave está bloqueando as notas do jogo." },
-  "braveFpFix": { "message": "Com a proteção contra fingerprinting do Brave ligada, o guitarflash.com não consegue carregar as notas e toda música termina na hora, sem nada para tocar (mesmo sem o bot). Para corrigir: no guitarflash.com, clique no leão (Shields) na barra de endereço, abra os controles avançados, desative o bloqueio de fingerprinting só para este site e recarregue a página." }
+  "braveFpFix": { "message": "Se não funcionar no Brave: clique no leão da barra de endereço e desative o bloqueio de fingerprinting." }
 }

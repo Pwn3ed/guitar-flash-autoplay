@@ -13,11 +13,11 @@ Primary language: Portuguese (Brazil); English translation below.
 Joga Guitar Flash por você: acerta as notas, acordes e notas longas, sem apertos errados. Liga e desliga com um clique.
 
 **Descrição:**
-O Guitar Flash Bot toca as músicas do Guitar Flash (guitarflash.com) sozinho, nota por nota.
+O Guitar Flash Bot toca as músicas do Guitar Flash sozinho, nota por nota.
 
 Como usar:
 1. Clique no ícone da extensão e aperte START.
-2. Abra qualquer música no guitarflash.com e aperte uma tecla para começar.
+2. Abra qualquer música no Guitar Flash e aperte uma tecla para começar.
 3. Assista: o bot acerta as notas, os acordes e segura as notas longas até o fim.
 4. Quando quiser parar, clique em STOP. Ao abrir o navegador, ele começa sempre desligado.
 
@@ -25,11 +25,11 @@ Destaques:
 • Acerta praticamente todas as notas, sem apertos errados (overstrums), inclusive no Expert.
 • Testado em músicas difíceis como Through the Fire and Flames (DragonForce): 99% no Expert.
 • Funciona em qualquer música e troca de música automaticamente.
-• Leve: roda só na página do guitarflash.com e não coleta nenhum dado.
+• Leve: roda só na página do Guitar Flash e não coleta nenhum dado.
 
 Como funciona: a extensão observa a pista do jogo na própria página e aperta as teclas no momento certo, sincronizada com o tempo da música.
 
-No Brave: desative o bloqueio de fingerprinting dos Shields para o guitarflash.com (leão na barra de endereço → controles avançados). Com ele ligado, o próprio site não carrega as notas e as músicas terminam na hora, com ou sem o bot; a extensão avisa no popup quando isso acontece.
+No Brave: se as músicas terminarem sem notas, clique no leão da barra de endereço e desative o bloqueio de fingerprinting.
 
 Aviso: projeto independente, sem vínculo com o Guitar Flash. Use para diversão; por favor, não envie pontuações do bot para o ranking do site.
 
@@ -45,11 +45,11 @@ Aviso: projeto independente, sem vínculo com o Guitar Flash. Use para diversão
 Plays Guitar Flash for you: hits the notes, chords and sustains with no overstrums. Turn it on and off with one click.
 
 **Description:**
-Guitar Flash Bot plays Guitar Flash (guitarflash.com) songs by itself, note by note.
+Guitar Flash Bot plays Guitar Flash songs by itself, note by note.
 
 How to use:
 1. Click the extension icon and press START.
-2. Open any song on guitarflash.com and press a key to begin.
+2. Open any song on Guitar Flash and press a key to begin.
 3. Watch: the bot hits the notes and chords and holds sustains to the end.
 4. Press STOP whenever you want. It always starts switched off when the browser opens.
 
@@ -57,11 +57,11 @@ Highlights:
 • Hits virtually every note with no overstrums, even on Expert.
 • Tested on hard songs such as Through the Fire and Flames (DragonForce): 99% on Expert.
 • Works on any song and follows you when you change songs.
-• Lightweight: runs only on guitarflash.com and collects no data.
+• Lightweight: runs only on the Guitar Flash page and collects no data.
 
 How it works: the extension watches the game's note highway on the page itself and presses the keys at the right moment, synchronized with the song's clock.
 
-On Brave: turn off Shields' fingerprinting blocking for guitarflash.com (lion in the address bar → advanced controls). With it on, the site itself cannot load the notes and songs end right away, with or without the bot; the extension shows a warning in its popup when this happens.
+On Brave: if songs end with no notes, click the lion in the address bar and turn off fingerprinting blocking.
 
 Disclaimer: independent project, not affiliated with Guitar Flash. Use it for fun; please don't submit bot scores to the site's rankings.
 
@@ -72,16 +72,16 @@ Disclaimer: independent project, not affiliated with Guitar Flash. Use it for fu
 ## Answers for the review forms
 
 **Single purpose (Chrome):**
-Automatically plays the browser game Guitar Flash (guitarflash.com) when the user turns it on.
-/ Joga automaticamente o jogo de navegador Guitar Flash (guitarflash.com) quando o usuário liga.
+Automatically plays the browser game Guitar Flash when the user turns it on.
+/ Joga automaticamente o jogo de navegador Guitar Flash quando o usuário liga.
 
 **Permission justifications:**
 - `storage`: saves whether the bot is on/off and the status shown in the popup.
-- Host permission `https://guitarflash.com/*`: the extension only works on the Guitar Flash page, where it reads the game's canvas and sends the game keys (A S J K L).
+- Host permission (Guitar Flash site): the extension only works on the Guitar Flash page, where it reads the game's canvas and sends the game keys (A S J K L).
 - No remote code: all code ships inside the package; nothing is downloaded or evaluated at runtime.
 
 **Data usage (Chrome "Privacy practices" / Firefox data collection):**
 Does not collect or transmit any user data. Declare "No data collected" / Firefox: `data_collection_permissions: none`.
 
 **Notes to reviewer (optional):**
-To test: open https://guitarflash.com, click the extension icon and press START, pick any song (e.g. "Through The Fire And Flames") and press any key to start it. The bot plays the song by itself; press STOP to end. No account is needed.
+To test: open the Guitar Flash game in the browser, click the extension icon and press START, pick any song (e.g. "Through The Fire And Flames") and press any key to start it. The bot plays the song by itself; press STOP to end. No account is needed.

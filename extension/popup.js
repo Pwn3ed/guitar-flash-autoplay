@@ -16,7 +16,7 @@ function line(label, value) { const d = document.createElement('div'); d.textCon
 function render(status) {
   // Brave fingerprinting protection on: the game cannot load the notes (see gfbot.js fingerprintBlocked)
   warn.hidden = !(status && status.fpBlocked);
-  if (!warn.hidden) { warn.replaceChildren(Object.assign(document.createElement('b'), { textContent: t('braveFpTitle') }), document.createElement('br'), t('braveFpFix')); }
+  if (!warn.hidden) warn.textContent = t('braveFpFix');
   btn.textContent = enabled ? t('stop') : t('start');
   btn.className = enabled ? 'stop' : 'start';
   st.replaceChildren();

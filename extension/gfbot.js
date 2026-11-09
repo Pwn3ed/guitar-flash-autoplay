@@ -1,4 +1,4 @@
-// Guitar Flash Bot - runs inside the guitarflash.com page (MAIN world).
+// Guitar Flash Bot - runs inside the Guitar Flash game page (MAIN world).
 // Controlled by the extension (bridge.js) through window.postMessage: {source:'gfbot-ext', cmd:'start'|'stop'}.
 //
 // How it works ("scene reader"):
@@ -476,7 +476,7 @@
   // Brave's fingerprinting protection (Shields, on by default) slightly changes what a page reads back from canvas and
   // audio. The game now uses those reads before it unlocks a song's notes, so with the protection on every song ends at
   // once with 0 notes ("You Rock", 0/0). The bot cannot change Shields; it detects the case so the popup can explain
-  // how to turn it off for guitarflash.com. Test: paint a solid colour and read it back - unchanged without the protection.
+  // how to turn it off for the game. Test: paint a solid colour and read it back - unchanged without the protection.
   function fingerprintBlocked() {
     try {
       if (!navigator.brave) return false;
