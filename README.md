@@ -2,7 +2,7 @@
 
 > Desenvolvido por **pwn3ed** · Licença [MIT](LICENSE)
 
-Extensão de navegador que joga Guitar Flash (guitarflash.com) sozinha: acha as notas na tela, aperta as
+Extensão de navegador que joga Guitar Flash sozinha: acha as notas na tela, aperta as
 teclas no momento certo (sincronizado com o relógio do vídeo do YouTube) e segura as notas longas.
 Guarda um histórico de todas as músicas tocadas (acertos, erros, overstrums, combo, pontuação).
 Funciona em Chrome, Edge, Brave, Opera e Firefox, em qualquer sistema (Windows, Linux, macOS).
@@ -41,6 +41,7 @@ Funciona em Chrome, Edge, Brave, Opera e Firefox, em qualquer sistema (Windows, 
 | `extension/` | **Código-fonte** da extensão (é aqui que se edita) |
 | `build.ps1` / `build.sh` | Gera os pacotes das lojas em `dist/` e atualiza a pasta do instalador (Windows / Linux e macOS) |
 | `dist/` | Pacotes para as lojas: `...-chromium-<versão>.zip` (Chrome, Edge, Opera) e `...-firefox-<versão>.zip` |
+| `server/` | Servidor das estatísticas anônimas e do painel (Cloudflare Worker + D1), ver `server/README.md` |
 | `store/` | Material das lojas: textos (`LISTING.md`), privacidade (`PRIVACY.md`), guia de envio (`ENVIO.md`), imagens |
 | `../guitar-flash-bot-INSTALADOR/` | **Instalador** pronto para Chrome/Edge/Brave, gerado pelo `build.ps1` (não editar) |
 
@@ -56,7 +57,7 @@ No Firefox: `about:debugging#/runtime/this-firefox` → **Carregar extensão tem
 
 ## Usar
 1. Clique no ícone → **START** (o ícone mostra "ON").
-2. Abra uma música no guitarflash.com e aperte uma tecla (Enter) para começar. O bot segue quando você troca de música.
+2. Abra uma música no Guitar Flash e aperte uma tecla (Enter) para começar. O bot segue quando você troca de música.
    Comece com o teclado, não com clique do mouse: o jogo pode contar o clique como um overstrum antes da primeira nota.
 3. **STOP** para parar. Fechar o navegador também para, e ele sempre abre desligado.
 
@@ -66,11 +67,16 @@ Observações: a aba do jogo e a **janela do navegador** precisam ficar visívei
 coberta por outra, o navegador reduz a página a ~2 quadros por segundo e o bot não consegue jogar.
 Se você estiver logado no site, as pontuações vão para o ranking.
 
-**Brave:** com a proteção contra fingerprinting dos Shields ligada (padrão do Brave), o guitarflash.com não consegue
-carregar as notas e toda música termina na hora com 0 notas ("You Rock", Special 0/0), **mesmo sem a extensão**:
-o jogo lê canvas/áudio antes de liberar as notas e o Brave altera essas leituras. Correção: no guitarflash.com, leão (Shields)
-→ controles avançados → desativar o bloqueio de fingerprinting só para o site, e recarregar. O popup avisa quando detecta isso
+**Brave:** se as músicas terminarem na hora, sem notas, clique no leão da barra de endereço e desative o bloqueio de
+fingerprinting (o jogo não carrega as notas com ele ligado, mesmo sem o bot). O popup lembra disso no Brave
 (`fingerprintBlocked()` no `gfbot.js`).
+
+## Estatísticas anônimas e painel
+Cada partida terminada vai para `https://gfb.pwn3ed.workers.dev/v1/plays`: o resultado, a versão e um id aleatório
+da instalação (nada de nome, login, e-mail ou dados do navegador; o servidor não grava IP). Fica ligado por padrão,
+com aviso na primeira vez e uma chave no popup; no Firefox é a permissão opcional `technicalAndInteraction`.
+O painel (ranking de músicas, pessoas por dia, versões, últimas partidas, CSV) fica em
+`https://gfb.pwn3ed.workers.dev/painel`, com senha em `~/.config/pessoal/gfb.env`. Detalhes em `server/README.md`.
 
 ## Depois de mudar o código
 ```powershell
@@ -86,9 +92,9 @@ Para publicar uma atualização, aumente `version` em `extension/manifest.json` 
 ## Arquivos da extensão
 - `manifest.json`: configuração (serve para Chrome e Firefox; o build ajusta cada um)
 - `gfbot.js`: o bot (roda dentro da página do jogo)
-- `bridge.js`: liga o botão START/STOP ao bot e grava o histórico
+- `bridge.js`: liga o botão START/STOP ao bot, grava o histórico e põe cada partida na fila de envio
 - `popup.html` / `popup.js`: a janelinha com o botão
 - `history.html` / `history.js`: página do histórico de músicas
-- `background.js`: deixa o bot desligado ao abrir o navegador e mostra "ON" no ícone
+- `background.js`: deixa o bot desligado ao abrir o navegador, mostra "ON" no ícone e envia as estatísticas anônimas (fila `outbox`, tenta de novo se falhar)
 - `_locales/`: textos em português e inglês
 - `icons/`: ícones

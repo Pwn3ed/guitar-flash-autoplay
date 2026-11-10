@@ -49,9 +49,9 @@ function Shot([string]$rawName, [string]$outName, [string]$title, [string]$sub, 
 }
 
 Shot 'ttfaf-streak.png' 'screenshot-1-pt.png' 'Acerta as notas por você' 'Acordes, notas longas e sequências rápidas, sem apertos errados.' 'pt'
-Shot 'ttfaf-dense.png' 'screenshot-2-pt.png' 'Through the Fire and Flames no Expert' 'Liga com um clique e joga sozinho qualquer música do guitarflash.com.' 'pt'
+Shot 'ttfaf-dense.png' 'screenshot-2-pt.png' 'Through the Fire and Flames no Expert' 'Liga com um clique e joga sozinho qualquer música do Guitar Flash.' 'pt'
 Shot 'ttfaf-streak.png' 'screenshot-1-en.png' 'Hits the notes for you' 'Chords, sustains and fast runs, with no overstrums.' 'en'
-Shot 'ttfaf-dense.png' 'screenshot-2-en.png' 'Through the Fire and Flames on Expert' 'One click to turn it on; it plays any song on guitarflash.com by itself.' 'en'
+Shot 'ttfaf-dense.png' 'screenshot-2-en.png' 'Through the Fire and Flames on Expert' 'One click to turn it on; it plays any Guitar Flash song by itself.' 'en'
 
 # small promo tile 440x280 (Chrome Web Store) / generic banner
 $bmp = New-Object System.Drawing.Bitmap 440, 280; $g = [System.Drawing.Graphics]::FromImage($bmp)

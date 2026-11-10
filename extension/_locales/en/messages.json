@@ -1,10 +1,10 @@
 {
   "appName": { "message": "Guitar Flash Bot" },
-  "appDesc": { "message": "Plays Guitar Flash (guitarflash.com) for you, hitting the notes, and keeps a history of every song. Developed by pwn3ed." },
+  "appDesc": { "message": "Plays Guitar Flash for you, hitting the notes, and keeps a history of every song. Developed by pwn3ed." },
   "start": { "message": "START" },
   "stop": { "message": "STOP" },
   "off": { "message": "Off." },
-  "onOpenSite": { "message": "On. Open guitarflash.com and pick a song." },
+  "onOpenSite": { "message": "On. Open Guitar Flash and pick a song." },
   "onWaiting": { "message": "On. Waiting for a song to open..." },
   "playing": { "message": "Playing" },
   "paused": { "message": "Paused" },
@@ -12,7 +12,7 @@
   "difficulty": { "message": "Difficulty" },
   "notes": { "message": "Notes played" },
   "time": { "message": "Time" },
-  "hint": { "message": "With the bot on, open a song on guitarflash.com and press any key to start. Keep the browser window visible." },
+  "hint": { "message": "With the bot on, open a song on Guitar Flash and press any key to start. Keep the browser window visible." },
   "rankNote": { "message": "Please don't submit bot scores to the rankings." },
   "developedBy": { "message": "Developed by" },
   "historyButton": { "message": "Song history" },
@@ -43,6 +43,8 @@
   "colPauses": { "message": "Pauses" },
   "resultCompleted": { "message": "Completed" },
   "resultIncomplete": { "message": "Interrupted" },
-  "braveFpTitle": { "message": "Brave is blocking the game’s notes." },
-  "braveFpFix": { "message": "With Brave’s fingerprinting protection on, guitarflash.com cannot load the notes and every song ends right away with nothing to play (even without the bot). To fix it: on guitarflash.com, click the lion (Shields) in the address bar, open the advanced controls, turn off fingerprinting blocking for this site only and reload the page." }
+  "braveFpFix": { "message": "If it doesn’t work on Brave: click the lion in the address bar and turn off fingerprinting blocking." },
+  "statsToggle": { "message": "Send anonymous statistics" },
+  "statsText": { "message": "So I can tell whether the bot plays well and which songs it misses, the extension sends each play’s result (song, difficulty, score, hits and misses) to my server. Your name, login, e-mail and anything about your browser are never sent, and the server does not keep your IP. This helps me improve the bot. You can turn it off here at any time." },
+  "statsOk": { "message": "Got it" }
 }

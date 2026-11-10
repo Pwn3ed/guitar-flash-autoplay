@@ -16,8 +16,14 @@
   #history:hover { background:#30303a; }
   .status { margin-top:12px; color:var(--muted); font-size:13px; min-height:54px; }
   .status b { color:var(--fg); }
-  .warn { margin-top:12px; padding:10px; border-radius:10px; background:#3a2a10; border:1px solid #a8741a; color:#ffd58a; font-size:12px; line-height:1.45; }
-  .warn b { color:#fff; }
+  .warn { margin:-4px 0 10px; font-size:12px; color:var(--muted); }
+  .stats { margin-top:10px; font-size:12px; color:var(--muted); }
+  .stats label { display:flex; align-items:center; gap:7px; cursor:pointer; }
+  .stats input { margin:0; accent-color:var(--on); }
+  .stats a { color:var(--muted); text-decoration:none; border:1px solid var(--line); border-radius:50%; width:16px; height:16px; display:inline-flex; align-items:center; justify-content:center; font-size:11px; margin-left:auto; }
+  .note { margin-bottom:8px; padding:10px; border:1px solid var(--line); border-radius:10px; background:#1d1d23; line-height:1.45; }
+  .note b { color:var(--fg); display:block; margin-bottom:4px; }
+  .note button { margin-top:8px; padding:7px; font-size:13px; background:#26262d; }
   .hint { margin-top:10px; font-size:12px; color:var(--muted); }
   footer { margin-top:12px; padding-top:10px; border-top:1px solid var(--line); font-size:11px; color:var(--muted); text-align:center; }
   footer b { color:var(--fg); }
@@ -30,6 +36,10 @@
     <div class="status" id="status"></div>
     <div class="warn" id="warn" hidden></div>
     <button id="history">History</button>
+    <div class="stats">
+      <div class="note" id="statsNote" hidden><b id="statsTitle"></b><span id="statsText"></span><button id="statsOk">OK</button></div>
+      <label><input type="checkbox" id="share"><span id="shareLabel"></span><a href="#" id="statsInfo">?</a></label>
+    </div>
     <div class="hint" id="hint"></div>
     <div class="hint" id="rank"></div>
     <footer id="credit">Developed by <b>pwn3ed</b></footer>
