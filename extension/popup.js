@@ -35,5 +35,27 @@ chrome.storage.onChanged.addListener((ch) => {
   if (ch.enabled) enabled = !!ch.enabled.newValue;
   if (ch.enabled || ch.status) chrome.storage.local.get('status', (v) => render(v.status));
 });
+// ---- anonymous statistics switch (see background.js). Explained once with "Got it", then behind the "?" ----
+const IS_FIREFOX = chrome.runtime.getURL('').startsWith('moz-extension:');
+const FF_DATA = { data_collection: ['technicalAndInteraction'] };
+const share = document.getElementById('share'), note = document.getElementById('statsNote');
+document.getElementById('shareLabel').textContent = t('statsToggle');
+document.getElementById('statsTitle').textContent = t('statsToggle');
+document.getElementById('statsText').textContent = t('statsText');
+document.getElementById('statsOk').textContent = t('statsOk');
+async function loadShare() {
+  if (IS_FIREFOX) { try { share.checked = await browser.permissions.contains(FF_DATA); } catch (e) { share.checked = false; share.disabled = true; } }
+  else share.checked = (await chrome.storage.local.get('shareStats')).shareStats !== false;
+}
+loadShare();
+chrome.storage.local.get('statsNoticeSeen', (v) => { note.hidden = !!v.statsNoticeSeen; });
+document.getElementById('statsOk').addEventListener('click', () => { note.hidden = true; chrome.storage.local.set({ statsNoticeSeen: true }); });
+document.getElementById('statsInfo').addEventListener('click', (e) => { e.preventDefault(); note.hidden = !note.hidden; });
+share.addEventListener('change', () => {
+  if (!IS_FIREFOX) { chrome.storage.local.set({ shareStats: share.checked }); return; }
+  // Firefox: the data permission itself is the switch (the request must come straight from the click)
+  const p = share.checked ? browser.permissions.request(FF_DATA) : browser.permissions.remove(FF_DATA).then(() => false);
+  p.then(loadShare, loadShare);
+});
 btn.addEventListener('click', () => chrome.storage.local.set({ enabled: !enabled }));
 document.getElementById('history').addEventListener('click', () => chrome.tabs.create({ url: chrome.runtime.getURL('history.html') }));

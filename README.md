@@ -41,6 +41,7 @@ Funciona em Chrome, Edge, Brave, Opera e Firefox, em qualquer sistema (Windows, 
 | `extension/` | **Código-fonte** da extensão (é aqui que se edita) |
 | `build.ps1` / `build.sh` | Gera os pacotes das lojas em `dist/` e atualiza a pasta do instalador (Windows / Linux e macOS) |
 | `dist/` | Pacotes para as lojas: `...-chromium-<versão>.zip` (Chrome, Edge, Opera) e `...-firefox-<versão>.zip` |
+| `server/` | Servidor das estatísticas anônimas e do painel (Cloudflare Worker + D1), ver `server/README.md` |
 | `store/` | Material das lojas: textos (`LISTING.md`), privacidade (`PRIVACY.md`), guia de envio (`ENVIO.md`), imagens |
 | `../guitar-flash-bot-INSTALADOR/` | **Instalador** pronto para Chrome/Edge/Brave, gerado pelo `build.ps1` (não editar) |
 
@@ -70,6 +71,13 @@ Se você estiver logado no site, as pontuações vão para o ranking.
 fingerprinting (o jogo não carrega as notas com ele ligado, mesmo sem o bot). O popup lembra disso no Brave
 (`fingerprintBlocked()` no `gfbot.js`).
 
+## Estatísticas anônimas e painel
+Cada partida terminada vai para `https://gfb.pwn3ed.workers.dev/v1/plays`: o resultado, a versão e um id aleatório
+da instalação (nada de nome, login, e-mail ou dados do navegador; o servidor não grava IP). Fica ligado por padrão,
+com aviso na primeira vez e uma chave no popup; no Firefox é a permissão opcional `technicalAndInteraction`.
+O painel (ranking de músicas, pessoas por dia, versões, últimas partidas, CSV) fica em
+`https://gfb.pwn3ed.workers.dev/painel`, com senha em `~/.config/pessoal/gfb.env`. Detalhes em `server/README.md`.
+
 ## Depois de mudar o código
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\build.ps1
@@ -84,9 +92,9 @@ Para publicar uma atualização, aumente `version` em `extension/manifest.json` 
 ## Arquivos da extensão
 - `manifest.json`: configuração (serve para Chrome e Firefox; o build ajusta cada um)
 - `gfbot.js`: o bot (roda dentro da página do jogo)
-- `bridge.js`: liga o botão START/STOP ao bot e grava o histórico
+- `bridge.js`: liga o botão START/STOP ao bot, grava o histórico e põe cada partida na fila de envio
 - `popup.html` / `popup.js`: a janelinha com o botão
 - `history.html` / `history.js`: página do histórico de músicas
-- `background.js`: deixa o bot desligado ao abrir o navegador e mostra "ON" no ícone
+- `background.js`: deixa o bot desligado ao abrir o navegador, mostra "ON" no ícone e envia as estatísticas anônimas (fila `outbox`, tenta de novo se falhar)
 - `_locales/`: textos em português e inglês
 - `icons/`: ícones

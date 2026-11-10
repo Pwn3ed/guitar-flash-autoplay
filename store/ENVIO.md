@@ -6,7 +6,7 @@ Pacotes (gerados por `build.ps1`, na pasta `dist`):
 
 Material para os formulários (pasta `store`):
 - Textos (nome, resumo, descrição em PT e EN, justificativa de permissões): `LISTING.md`
-- Política de privacidade: `PRIVACY.md` (as lojas pedem uma URL; dá para publicar esse texto num GitHub Gist ou GitHub Pages e colar o link)
+- Política de privacidade: `PRIVACY.md`, publicada em **https://gfb.pwn3ed.workers.dev/privacidade** (é essa URL que vai no formulário; o servidor lê o próprio `PRIVACY.md` a cada deploy do `server/`)
 - Imagens 1280x800: `images/screenshot-1-pt.png`, `images/screenshot-2-pt.png` (e as versões `-en`)
 - Tile promocional 440x280: `images/promo-440x280.png`
 - Ícone 128x128: `../extension/icons/icon128.png` (ícone 300x300 para o Opera/Edge: `icon300.png`)
