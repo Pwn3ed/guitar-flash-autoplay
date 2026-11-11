@@ -153,6 +153,17 @@ describe('/painel', () => {
   });
 });
 
+describe('CSV sem fórmula', () => {
+  it('texto que começa com = + - @ vai com apóstrofo; número não muda', async () => {
+    await post(partida({ title: '=HYPERLINK("http://x","clique")', artist: '@SUM(A1)' }));
+    const r = await SELF.fetch('https://gfb.test/painel/partidas.csv', { headers: auth('senha-de-teste') });
+    const t = await r.text();
+    expect(t).toContain(`"'=HYPERLINK(""http://x"",""clique"")"`);
+    expect(t).toContain(`'@SUM(A1)`);
+    expect(t).not.toMatch(/,=|,@/);
+  });
+});
+
 describe('cópia para o R2', () => {
   it('cron exporta tudo em NDJSON gzip e guarda só as 12 mais novas', async () => {
     for (let i = 0; i < 14; i++) await E.BACKUP.put(`exports/plays-2026-01-${String(i + 1).padStart(2, '0')}T00-00-00Z.ndjson.gz`, 'x');
@@ -171,6 +182,18 @@ describe('cópia para o R2', () => {
     expect(linhas).toHaveLength(2);
     expect(linhas[0]).toMatchObject({ install_id: INST, title: 'Through The Fire And Flames' });
     expect(linhas[0]._r).toBeUndefined();
+  });
+
+  it('recusa POST vindo de outro site (CSRF)', async () => {
+    const antes = (await E.BACKUP.list({ prefix: 'exports/' })).objects.length;
+    const r = await SELF.fetch('https://gfb.test/painel/exportar', { method: 'POST', headers: { ...auth('senha-de-teste'), 'Sec-Fetch-Site': 'cross-site' } });
+    expect(r.status).toBe(403);
+    expect((await E.BACKUP.list({ prefix: 'exports/' })).objects).toHaveLength(antes);
+  });
+
+  it('aceita o botão do próprio painel', async () => {
+    const r = await SELF.fetch('https://gfb.test/painel/exportar', { method: 'POST', headers: { ...auth('senha-de-teste'), 'Sec-Fetch-Site': 'same-origin', Origin: 'null' } });
+    expect(await r.text()).toContain('Cópia salva no R2');
   });
 
   it('pelo painel', async () => {

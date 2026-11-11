@@ -133,7 +133,12 @@ const CSV_COLS = ['received_at', 'started_at', 'ended_at', 'install_id', 'play_i
 
 export async function csvPartidas(env: Env): Promise<string> {
   const iso = (v: unknown) => (v == null ? '' : new Date(Number(v)).toISOString());
-  const cel = (v: unknown) => { const s = v == null ? '' : String(v); return /[",\n;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  // qualquer um pode mandar partida: texto começando com = + - @ viraria fórmula no Excel/LibreOffice, então leva um '
+  const cel = (v: unknown) => {
+    let s = v == null ? '' : String(v);
+    if (typeof v === 'string' && /^[=+\-@\t\r]/.test(s)) s = "'" + s;
+    return /[",\n;\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
   const linhas = [CSV_COLS.join(',')];
   let ultimo = 0;
   for (;;) {

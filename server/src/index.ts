@@ -72,6 +72,10 @@ async function painel(req: Request, env: Env, url: URL): Promise<Response> {
     return new Response(await csvPartidas(env), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="gfb-partidas-${dia}.csv"`, 'Cache-Control': 'no-store', ...SEGURANCA } });
   }
   if (url.pathname === '/painel/exportar' && req.method === 'POST') {
+    // o navegador manda a senha guardada até em formulário de outro site: só aceita POST vindo do próprio painel
+    // (Origin não serve: com Referrer-Policy no-referrer o próprio formulário manda "Origin: null")
+    const site = req.headers.get('Sec-Fetch-Site');
+    if (site && site !== 'same-origin' && site !== 'none') return new Response('Origem não permitida', { status: 403, headers: SEGURANCA });
     const r = await exportar(env);
     return new Response(htmlPainel(await dadosPainel(env), `Cópia salva no R2: ${r.chave} (${r.partidas} partidas).`), { headers: html });
   }
