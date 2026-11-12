@@ -86,7 +86,8 @@ function download(name, type, text) {
 }
 const FIELDS = ['startedAt', 'endedAt', 'title', 'artist', 'difficulty', 'mode', 'completed', 'percentage', 'notesHit', 'notesMissed', 'overstrums', 'maxCombo', 'score', 'special', 'presses', 'reached', 'duration', 'pauses'];
 $('csv').addEventListener('click', () => {
-  const esc = (v) => { const s = v == null ? '' : String(v); return /[",\n;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  // text starting with = + - @ would run as a formula in Excel/LibreOffice: prefix it with '
+  const esc = (v) => { let s = v == null ? '' : String(v); if (typeof v === 'string' && /^[=+\-@\t\r]/.test(s)) s = "'" + s; return /[",\n;\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
   const csv = [FIELDS.join(','), ...all.map((e) => FIELDS.map((f) => esc(e[f])).join(','))].join('\n');
   download('guitar-flash-bot-history.csv', 'text/csv', '﻿' + csv);
 });
